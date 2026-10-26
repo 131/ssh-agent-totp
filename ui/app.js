@@ -124,12 +124,30 @@ function ring() {
   return svg;
 }
 // Folders are the "/" separated parts of the issuer but the last one:
-// "Azure/fleurent(perso)" is fleurent(perso) in the Azure folder. A folder is
-// a card that opens its own list (a sub-menu), with a way back on top.
-const parts = code => (code.issuer || '').split('/').map(part => part.trim());
-const folders = code => parts(code).slice(0, -1).filter(Boolean);
-const leaf = code => parts(code).at(-1);
-let here = [];
+// "Azure/fleurent(perso)" is fleurent(perso) in the Azure folder. An issuer
+// with at least 2 tokens with an account is a folder of its accounts
+// ("Microsoft:a" is a in the Microsoft folder, like "Microsoft/a"). A token
+// named like a folder goes inside it. A folder is a card that opens its own
+// list (a sub-menu), with a way back on top. See specs/TOKENS.md.
+const parts = code => (code.issuer || '').split('/').map(part => part.trim()).filter(Boolean);
+function placement(codes) {
+  const accounts = new Map();
+  for (const code of codes) if (code.account) { const key = parts(code).join('/'); accounts.set(key, (accounts.get(key) || 0) + 1); }
+  const place = new Map(), paths = new Set();
+  for (const code of codes) {
+    const base = parts(code), grouped = base.length && code.account && accounts.get(base.join('/')) >= 2;
+    const spot = grouped ? {path: base, name: code.account, account: ''} : {path: base.slice(0, -1), name: base.at(-1) || '', account: code.account};
+    place.set(code.id, spot);
+    spot.path.forEach((_, depth) => paths.add(spot.path.slice(0, depth + 1).join('/')));
+  }
+  for (const code of codes) {
+    const base = parts(code), spot = place.get(code.id);
+    if (spot.path.length < base.length && paths.has(base.join('/'))) spot.path = base;
+  }
+  return place;
+}
+let here = [], place = new Map();
+const folders = code => place.get(code.id)?.path || [];
 const inside = (code, path) => path.every((name, depth) => folders(code)[depth] === name);
 function go(path, direction) {
   here = path; $('list').scrollTop = 0; render();
@@ -163,6 +181,7 @@ function backRow() {
 function render() {
   $('path').textContent = state.path; $('path').title = state.path; $('file').textContent = state.path; $('file').title = state.path;
   const search = $('search').value.trim().toLowerCase();
+  place = placement(state.codes);
   // A search lists every match, whatever its folder, under its full name.
   while (here.length && !search && !state.codes.some(code => inside(code, here))) here = here.slice(0, -1);
   const codes = search ? state.codes.filter(code => label(code).toLowerCase().includes(search)) : state.codes.filter(code => inside(code, here));
@@ -175,18 +194,19 @@ function render() {
     if (!state.codes.length) { const button = document.createElement('button'); button.type = 'button'; button.textContent = t('import'); button.addEventListener('click', () => openImport('batch')); empty.append(button); }
     list.append(empty); return;
   }
-  // Go sorts by name: a folder's tokens follow each other, the folder card
-  // takes the place of the first one.
-  const counts = new Map();
+  // Alphabetical on the name shown, case-insensitive; a folder card counts
+  // every token below it.
+  const counts = new Map(), entries = [];
   if (!search) for (const code of codes) { const name = folders(code)[here.length]; if (name !== undefined) counts.set(name, (counts.get(name) || 0) + 1); }
+  for (const [name, count] of counts) entries.push({key: [name.toLowerCase(), ''], card: folderCard(name, count)});
   for (const code of codes) {
-    const sub = search ? undefined : folders(code)[here.length];
-    if (sub !== undefined) { if (counts.has(sub)) { list.append(folderCard(sub, counts.get(sub))); counts.delete(sub); } continue; }
+    if (!search && folders(code)[here.length] !== undefined) continue;
+    const spot = place.get(code.id);
+    const shown = search ? code.issuer : spot.name, sub = search ? code.account : spot.account;
     const card = document.createElement('article'); card.className = code.error ? 'card failed' : 'card'; card.dataset.id = code.id; card.dataset.copied = t('copied');
     const name = document.createElement('div'); name.className = 'label';
-    const shown = search ? code.issuer : leaf(code);
-    const issuer = document.createElement('strong'); issuer.textContent = shown || code.account;
-    const account = document.createElement('span'); account.textContent = shown ? code.account : '';
+    const issuer = document.createElement('strong'); issuer.textContent = shown || sub;
+    const account = document.createElement('span'); account.textContent = shown ? sub : '';
     name.title = label(code); name.append(issuer, account);
     const value = document.createElement('div'); value.className = 'code'; value.textContent = code.error || group(code.code);
     if (code.error) value.title = code.error;
@@ -197,8 +217,11 @@ function render() {
     side.append(tools);
     card.append(name, value, side);
     if (!code.error) card.addEventListener('click', () => { if (!document.body.classList.contains('editing')) run(card, () => copyCode(code, card)); });
-    list.append(card);
+    entries.push({key: [(shown || sub).toLowerCase(), shown ? (sub || '').toLowerCase() : ''], card});
   }
+  const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  entries.sort((a, b) => compare(a.key[0], b.key[0]) || compare(a.key[1], b.key[1]));
+  list.append(...entries.map(entry => entry.card));
   list.scrollTop = scroll; tick();
 }
 async function copyCode(code, card) {

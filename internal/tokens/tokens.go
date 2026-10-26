@@ -327,8 +327,10 @@ func (s *Store) Rename(id int, issuer, account string) error {
 }
 
 // RenameFolder renames the folder "from" (a "/" separated path, see
-// specs/TOKENS.md) to "to" in the issuer of every token inside it. An empty
-// "to" moves them to the top level. It returns the number of tokens renamed.
+// specs/TOKENS.md) to "to" in the issuer of every token inside it, the tokens
+// whose issuer is "from" itself included (accounts of an issuer, token named
+// like the folder). An empty "to" moves them to the top level; an issuer that
+// is "from" itself keeps its last part. It returns the number of tokens renamed.
 func (s *Store) RenameFolder(from, to string) (int, error) {
 	clean := func(path string) string {
 		parts := []string{}
@@ -352,11 +354,16 @@ func (s *Store) RenameFolder(from, to string) (int, error) {
 	for index, current := range updated {
 		issuer := clean(current.token.Issuer)
 		rest, inside := strings.CutPrefix(issuer, from+"/")
-		if !inside {
-			continue
-		}
-		if to != "" {
+		switch {
+		case inside && to != "":
 			rest = to + "/" + rest
+		case inside:
+		case issuer == from && to != "":
+			rest = to
+		case issuer == from:
+			rest = from[strings.LastIndex(from, "/")+1:]
+		default:
+			continue
 		}
 		updated[index].token.Issuer = rest
 		renamed++

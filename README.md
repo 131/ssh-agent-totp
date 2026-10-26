@@ -35,8 +35,10 @@ Your SSH agent must be running with at least one key loaded.
   - *Export*: every token as `otpauth://` links, to move to another device.
     The text stays masked until you show it; a click on it copies it.
 - **Folders**: tokens are sorted by name; `/` in a name makes folders,
-  `Azure/fleurent(perso)` and `Azure/fleurent(admin)` sit in `Azure`. Click a
-  folder to open it, Escape to come back.
+  `Azure/fleurent(perso)` and `Azure/fleurent(admin)` sit in `Azure`. An
+  issuer with several accounts is a folder too: `Microsoft:a` and
+  `Microsoft:b` sit in `Microsoft`. Click a folder to open it, Escape to come
+  back.
 - **Edit mode** (pencil): rename and delete tokens, rename folders (every
   token inside follows). Out of edit mode nothing can be deleted by mistake,
   and a deletion still asks first.

@@ -262,7 +262,8 @@ func TestAddOne(t *testing.T) {
 
 func TestRenameFolder(t *testing.T) {
 	s, _ := store(t, "otpauth://totp/Azure/fleurent(perso):?secret=JBSWY3DPEHPK3PXA\notpauth://totp/x?issuer=Azure%20/%20sub/x&secret=JBSWY3DPEHPK3PXB\notpauth://totp/Azure:?secret=JBSWY3DPEHPK3PXC\notpauth://totp/Azurex/y:?secret=JBSWY3DPEHPK3PXD\n")
-	if renamed, err := s.RenameFolder("Azure", " Cloud/MS "); err != nil || renamed != 2 {
+	// "Azure" itself (a token named like the folder) follows the folder.
+	if renamed, err := s.RenameFolder("Azure", " Cloud/MS "); err != nil || renamed != 3 {
 		t.Fatal(renamed, err)
 	}
 	if _, err := s.RenameFolder("Azure", "x"); err == nil {
@@ -276,7 +277,19 @@ func TestRenameFolder(t *testing.T) {
 	for _, code := range codes {
 		got = append(got, code.Issuer)
 	}
-	if strings.Join(got, ",") != "Azure,Azurex/y,Cloud/MS/fleurent(perso),Cloud/MS/x" {
+	if strings.Join(got, ",") != "Azurex/y,Cloud/MS,Cloud/MS/fleurent(perso),Cloud/MS/x" {
+		t.Fatal(got)
+	}
+	// Out of every folder, the folder's own token keeps its last part.
+	if renamed, err := s.RenameFolder("Cloud/MS", ""); err != nil || renamed != 3 {
+		t.Fatal(renamed, err)
+	}
+	codes, _ = s.Codes()
+	got = got[:0]
+	for _, code := range codes {
+		got = append(got, code.Issuer)
+	}
+	if strings.Join(got, ",") != "Azurex/y,fleurent(perso),MS,x" {
 		t.Fatal(got)
 	}
 }

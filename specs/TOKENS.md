@@ -47,8 +47,8 @@ so it reads back as an account.
 
 ## Order
 
-Alphabetical, case-insensitive, on `issuer` then `account`; the file is
-written in that order too. There is no other order and no way to move a token:
+Alphabetical, case-insensitive: the file on `issuer` then `account`, the
+list on the name shown. There is no other order and no way to move a token:
 rename it.
 
 ## Names and folders
@@ -61,11 +61,27 @@ Backspace or Alt+Left too). Folders nest (`Work/Azure/admin`). A search lists
 every match, whatever its folder, under its full name. Folders exist only
 through names: renaming the last token out of a folder removes it.
 
+Two more rules, for display only (the file keeps `issuer` and `account`):
+
+- **An issuer with at least 2 tokens with an account becomes a folder of its
+  accounts.** `Microsoft:a`, `Microsoft:b` and `Microsoft/c` show as a
+  `Microsoft` folder holding `a`, `b` and `c`. With a single account, the
+  token stays as it is: issuer in bold, account next to it.
+- **A token named like a folder goes inside it**, under its name: `Azure`
+  (no account) next to `Azure/CN` and `Azure/admin` is the third entry of the
+  `Azure` folder. A card and a folder never share a name.
+
+Tokens without an account are never grouped (two `GitHub` stay two cards: give
+them an account). Names are compared exactly: `Github` and `GitHub` are two
+issuers. Inside a folder, entries are in alphabetical order on the name shown.
+
 In edit mode, a folder card has a rename tool: the new path replaces the
-folder in the `issuer` of every token inside, sub-folders included
-(`Azure` → `Cloud/Azure` moves `Azure/fleurent(perso)` to
-`Cloud/Azure/fleurent(perso)`). An existing folder name merges both; an empty
-name takes the tokens out of every folder. One write, like any change.
+folder in the `issuer` of every token inside, sub-folders and the folder's own
+tokens included (`Azure` → `Cloud/Azure` moves `Azure/fleurent(perso)` to
+`Cloud/Azure/fleurent(perso)`, and `Azure:x` to `Cloud/Azure:x`). An
+existing folder name merges both; an empty name takes the tokens out of every
+folder (the folder's own tokens keep its last part as issuer). One write, like
+any change.
 
 ## Reading and writing
 
