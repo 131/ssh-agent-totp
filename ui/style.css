@@ -114,6 +114,7 @@ dialog p{margin:4px 0}
 @keyframes slide-in{from{transform:translateX(24px);opacity:.4}}
 @keyframes slide-back{from{transform:translateX(-24px);opacity:.4}}
 /* token cards */
+#tokens:not([hidden]){flex:1;min-height:0;display:flex;flex-direction:column}
 #list{flex:1;min-height:0;overflow-y:auto;background:#f7f9f6;padding:6px}
 .card{position:relative;display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:8px;padding:5px 8px 6px 10px;margin-bottom:5px;background:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer}
 .card:hover{border-color:#b9cbb9;background:#fbfdfa}
