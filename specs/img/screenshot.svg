@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="450" viewBox="0 0 680 450" font-family="Segoe UI, system-ui, sans-serif">
+<title>ssh-agent-totp: the code list, and the Azure folder opened</title>
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#12322a" flood-opacity=".2"/></filter><filter id="tsh" x="-10%" y="-30%" width="120%" height="180%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#12322a" flood-opacity=".2"/></filter></defs>
+<g transform="translate(20 20)">
+<g filter="url(#sh)"><rect width="300" height="400" rx="6" fill="#f7f9f6" stroke="#c9d3c7"/></g>
+<rect x="1" y="1" width="298" height="30" rx="5" fill="#fff"/><path d="M1 31.5h298" stroke="#e1e7df"/>
+<g transform="translate(9 8) scale(0.5)"><rect width="32" height="32" rx="7" fill="#111"/><path d="M12.5 9V6.5a3.5 3.5 0 0 1 7 0V9" fill="none" stroke="#f5c518" stroke-width="2.4"/><circle cx="16" cy="19" r="9" fill="#f5c518"/><path d="M16 13.5V19l3.5 2.5" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round"/></g>
+<text x="31" y="21" font-size="12" font-weight="700" fill="#24342f">ssh-agent-totp<tspan font-size="10.5" font-weight="400" fill="#7b8a7f"> v0.1.0</tspan></text>
+<g stroke="#4c5c51" stroke-width="1.3" fill="none" stroke-linecap="round"><path d="M168 16h9M172.5 11.5v9"/><path d="M196 20.5l1-3.5 6-6 2.5 2.5-6 6z"/><path d="M220 20l4.5-4.5M226 11.5a3 3 0 1 0 2.5 2.5"/><path d="M248 16.5h9"/><path d="M280 11.5l8 8M288 11.5l-8 8"/></g>
+<rect x="1" y="32" width="298" height="34" fill="#fbfcfa"/><path d="M1 66.5h298" stroke="#e1e7df"/><rect x="8.5" y="38.5" width="283" height="22" rx="4" fill="#fff" stroke="#d3ddd1"/><text x="16" y="53.5" font-size="11.5" fill="#9aa69c">Search (/)</text>
+<rect x="6.5" y="74.5" width="287" height="52" rx="6" fill="#fff" stroke="#e1e7df"/>
+<text x="16" y="90" font-size="12" font-weight="700" fill="#33463a">Azure</text><text x="16" y="112" font-size="11.5" fill="#7b8a7f">2 tokens</text><text x="274" y="108" font-size="24" fill="#24533c">›</text>
+<rect x="6.5" y="132.5" width="287" height="52" rx="6" fill="#fff" stroke="#e1e7df"/>
+<text x="16" y="148" font-size="12" font-weight="700" fill="#33463a">GitHub<tspan font-size="11" font-weight="400" fill="#7b8a7f" dx="6">fake-user</tspan></text>
+<text x="16" y="174" font-family="Cascadia Mono, Consolas, monospace" font-size="23" font-weight="600" letter-spacing="1" fill="#24533c">740 183</text>
+<circle cx="270" cy="165" r="8" fill="none" stroke="#e3e9e1" stroke-width="2.6"/><circle cx="270" cy="165" r="8" fill="none" stroke="#5c9a72" stroke-width="2.6" stroke-dasharray="31.2 50.3" transform="rotate(-90 270 165)"/>
+<rect x="6.5" y="190.5" width="287" height="52" rx="6" fill="#fff" stroke="#e1e7df"/>
+<text x="16" y="206" font-size="12" font-weight="700" fill="#33463a">github 131<tspan font-size="11" font-weight="400" fill="#7b8a7f" dx="6"></tspan></text>
+<text x="16" y="232" font-family="Cascadia Mono, Consolas, monospace" font-size="23" font-weight="600" letter-spacing="1" fill="#24533c">5536 5093</text>
+<circle cx="270" cy="223" r="8" fill="none" stroke="#e3e9e1" stroke-width="2.6"/><circle cx="270" cy="223" r="8" fill="none" stroke="#5c9a72" stroke-width="2.6" stroke-dasharray="31.2 50.3" transform="rotate(-90 270 223)"/>
+<rect x="6.5" y="248.5" width="287" height="52" rx="6" fill="#fff" stroke="#e1e7df"/>
+<text x="16" y="264" font-size="12" font-weight="700" fill="#33463a">AWS<tspan font-size="11" font-weight="400" fill="#7b8a7f" dx="6">root</tspan></text>
+<text x="16" y="290" font-family="Cascadia Mono, Consolas, monospace" font-size="23" font-weight="600" letter-spacing="1" fill="#24533c">218 904</text>
+<circle cx="270" cy="281" r="8" fill="none" stroke="#e3e9e1" stroke-width="2.6"/><circle cx="270" cy="281" r="8" fill="none" stroke="#5c9a72" stroke-width="2.6" stroke-dasharray="31.2 50.3" transform="rotate(-90 270 281)"/>
+<path d="M1 379.5h298" stroke="#e1e7df"/><text x="8" y="393" font-size="10" fill="#7b8a7f">%APPDATA%\ssh-agent-totp\tokens.crypt</text>
+</g>
+<path d="M330 220h16" stroke="#9aa69c" stroke-width="1.5" fill="none"/><path d="M342 215l6 5-6 5" fill="none" stroke="#9aa69c" stroke-width="1.5"/>
+<g transform="translate(360 20)">
+<g filter="url(#sh)"><rect width="300" height="400" rx="6" fill="#f7f9f6" stroke="#c9d3c7"/></g>
+<rect x="1" y="1" width="298" height="30" rx="5" fill="#fff"/><path d="M1 31.5h298" stroke="#e1e7df"/>
+<g transform="translate(9 8) scale(0.5)"><rect width="32" height="32" rx="7" fill="#111"/><path d="M12.5 9V6.5a3.5 3.5 0 0 1 7 0V9" fill="none" stroke="#f5c518" stroke-width="2.4"/><circle cx="16" cy="19" r="9" fill="#f5c518"/><path d="M16 13.5V19l3.5 2.5" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round"/></g>
+<text x="31" y="21" font-size="12" font-weight="700" fill="#24342f">ssh-agent-totp<tspan font-size="10.5" font-weight="400" fill="#7b8a7f"> v0.1.0</tspan></text>
+<g stroke="#4c5c51" stroke-width="1.3" fill="none" stroke-linecap="round"><path d="M168 16h9M172.5 11.5v9"/><path d="M196 20.5l1-3.5 6-6 2.5 2.5-6 6z"/><path d="M220 20l4.5-4.5M226 11.5a3 3 0 1 0 2.5 2.5"/><path d="M248 16.5h9"/><path d="M280 11.5l8 8M288 11.5l-8 8"/></g>
+<rect x="1" y="32" width="298" height="34" fill="#fbfcfa"/><path d="M1 66.5h298" stroke="#e1e7df"/><rect x="8.5" y="38.5" width="283" height="22" rx="4" fill="#fff" stroke="#d3ddd1"/><text x="16" y="53.5" font-size="11.5" fill="#9aa69c">Search (/)</text>
+<text x="12" y="88" font-size="15" fill="#24533c">‹</text><text x="26" y="87.5" font-size="12" font-weight="700" fill="#24533c">Azure</text>
+<rect x="6.5" y="98.5" width="287" height="52" rx="6" fill="#fff" stroke="#e1e7df"/>
+<text x="16" y="114" font-size="12" font-weight="700" fill="#33463a">fleurent(admin)<tspan font-size="11" font-weight="400" fill="#7b8a7f" dx="6"></tspan></text>
+<text x="16" y="140" font-family="Cascadia Mono, Consolas, monospace" font-size="23" font-weight="600" letter-spacing="1" fill="#b5532f">958 068</text>
+<circle cx="270" cy="131" r="8" fill="none" stroke="#e3e9e1" stroke-width="2.6"/><circle cx="270" cy="131" r="8" fill="none" stroke="#c4553a" stroke-width="2.6" stroke-dasharray="6.0 50.3" transform="rotate(-90 270 131)"/>
+<rect x="6.5" y="156.5" width="287" height="52" rx="6" fill="#fff" stroke="#e1e7df"/>
+<text x="16" y="172" font-size="12" font-weight="700" fill="#33463a">fleurent(perso)<tspan font-size="11" font-weight="400" fill="#7b8a7f" dx="6"></tspan></text>
+<text x="16" y="198" font-family="Cascadia Mono, Consolas, monospace" font-size="23" font-weight="600" letter-spacing="1" fill="#b5532f">627 830</text>
+<circle cx="270" cy="189" r="8" fill="none" stroke="#e3e9e1" stroke-width="2.6"/><circle cx="270" cy="189" r="8" fill="none" stroke="#c4553a" stroke-width="2.6" stroke-dasharray="6.0 50.3" transform="rotate(-90 270 189)"/>
+<path d="M1 379.5h298" stroke="#e1e7df"/><text x="8" y="393" font-size="10" fill="#7b8a7f">%APPDATA%\ssh-agent-totp\tokens.crypt</text>
+<g filter="url(#tsh)"><rect x="10" y="40" width="280" height="30" rx="5" fill="#fff" stroke="#cfe0d2"/></g><rect x="10" y="40" width="3" height="30" rx="1.5" fill="#3f8a55"/><text x="20" y="59" font-size="11.5" fill="#24342f">Code Azure/fleurent(admin) copied.</text><text x="276" y="59" font-size="13" fill="#7b8a7f">×</text>
+</g>
+</svg>

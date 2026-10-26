@@ -1,0 +1,28 @@
+name: test
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Windows runners ship Git with core.autocrlf=true, which would turn LF sources into CRLF
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: gofmt -l . && test -z "$(gofmt -l .)"
+        shell: bash
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build -ldflags "-H windowsgui" -o ssh-agent-totp.exe .
+        if: runner.os == 'Windows'

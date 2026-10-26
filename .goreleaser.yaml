@@ -1,0 +1,29 @@
+version: 2
+
+project_name: ssh-agent-totp
+
+builds:
+  - id: windows
+    main: .
+    goos: [windows]
+    goarch: [amd64]
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ['-H windowsgui -s -w -X main.version={{ .Tag }}']
+    hooks:
+      post: .gh-actions/sign-binaries/sign {{ .Path }}
+
+archives:
+  - formats: [binary]
+    name_template: '{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}'
+
+release:
+  prerelease: auto
+
+checksum:
+  name_template: SHA256SUMS
+
+changelog:
+  filters:
+    exclude:
+      - '^v[0-9]+\.[0-9]+\.[0-9]+$'
