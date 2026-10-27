@@ -71,7 +71,7 @@ network.
 
 ## Settings
 
-Language, SSH key and updates are set from the app. Everything else lives in
+Language, SSH key, launch on startup and updates are set from the app. Everything else lives in
 `%APPDATA%\ssh-agent-totp\settings.yml`: see [settings](specs/SETTINGS.md).
 
 ## Security

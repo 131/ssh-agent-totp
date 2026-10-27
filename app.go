@@ -6,6 +6,7 @@ import (
 	sshagentcrypt "github.com/131/ssh-agent-crypt"
 
 	"github.com/131/ssh-agent-totp/internal/i18n"
+	"github.com/131/ssh-agent-totp/internal/startup"
 	"github.com/131/ssh-agent-totp/internal/tokens"
 	"github.com/131/ssh-agent-totp/internal/totp"
 	"github.com/131/ssh-agent-totp/internal/update"
@@ -21,6 +22,7 @@ type App struct {
 	Open    func(string) error
 	Agent   func() string
 	Updater *update.Updater
+	Startup *startup.Store
 	// Relaunch starts the updated executable and ends this instance.
 	Relaunch func(path string) error
 	// Reload renders the page again, in the current language.
@@ -43,6 +45,7 @@ func NewApp(open func(string) error) *App {
 		Open:     open,
 		Agent:    agent,
 		Updater:  update.New(version, store, update.Authenticode),
+		Startup:  startup.DefaultStore(),
 		Settings: store,
 	}
 }
@@ -212,6 +215,27 @@ func (a *App) Handle(method string, args []json.RawMessage) (any, error) {
 		}
 
 		return count, nil
+
+	case "startup_status":
+		enabled, err := a.Startup.Enabled()
+		if err != nil {
+			return nil, i18n.Errorf("err.startup", err)
+		}
+
+		return enabled, nil
+
+	case "startup_enable":
+		enabled, err := arg[bool](args, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		state, err := a.Startup.SetEnabled(enabled)
+		if err != nil {
+			return nil, i18n.Errorf("err.startup", err)
+		}
+
+		return state, nil
 
 	case "set_language":
 		language, err := arg[string](args, 0)

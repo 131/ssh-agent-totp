@@ -128,7 +128,9 @@
     "window.minimize": "Réduire",
     "pin": "Épingler dans le tray",
     "unpin": "Retirer du tray",
-    "tray.copied": "Code TOTP copié dans le presse-papiers"
+    "tray.copied": "Code TOTP copié dans le presse-papiers",
+    "startup.launch": "Lancer à l’ouverture de session",
+    "err.startup": "Démarrage automatique : %s"
   },
   "en-us": {
     "add": "Add, import, export",
@@ -259,6 +261,8 @@
     "window.minimize": "Minimize",
     "pin": "Pin to tray",
     "unpin": "Unpin from tray",
-    "tray.copied": "TOTP code copied to clipboard"
+    "tray.copied": "TOTP code copied to clipboard",
+    "startup.launch": "Launch on startup",
+    "err.startup": "Launch on startup: %s"
   }
 }

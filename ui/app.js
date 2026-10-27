@@ -360,7 +360,20 @@ call('version').then(version => { $('version').textContent = version; $('current
 // Settings dialog (wrench): language, update channel and manual check. The
 // channel list comes from manifest.json; the automatic check stays silent.
 $('settings-button').append(icon('wrench'));
-$('settings-button').addEventListener('click', () => { $('settings').showModal(); loadKeys(); });
+$('settings-button').addEventListener('click', () => { $('settings').showModal(); loadKeys(); loadStartup(); });
+async function loadStartup() {
+  const button = $('launch-startup');
+  button.disabled = true;
+  try {
+    button.checked = await call('startup_status');
+    button.disabled = false;
+  } catch (error) { notice(error.message, true); }
+}
+$('launch-startup').addEventListener('change', () => run($('launch-startup'), async () => {
+  const button = $('launch-startup'), previous = !button.checked;
+  try { button.checked = await call('startup_enable', button.checked); }
+  catch (error) { button.checked = previous; throw error; }
+}));
 $('close-settings').addEventListener('click', () => $('settings').close());
 // A click on the grayed backdrop closes the settings, like Escape.
 $('settings').addEventListener('click', event => {
