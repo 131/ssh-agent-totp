@@ -158,3 +158,13 @@ dialog closes. The links import back as they are.
 The SSH key chosen in the settings (`tokens.key`) seals the file. Choosing
 another one seals it again with the new key at once; the former key is no
 longer needed, except to open older `.bak` copies.
+
+## Tray pins
+
+The token edit dialog can pin a token to the notification-area menu. Pins are
+stored inside the sealed file as the optional `pinned=true` otpauth query
+parameter (also preserved by export/import); absent means unpinned.
+The tray lists only pinned tokens, with full paths such as `a / b / c`,
+including the account when present, sorted alphabetically without submenus.
+Clicking computes and copies the current TOTP through the same clipboard
+function as the main window. Pinning does not change the main list order.

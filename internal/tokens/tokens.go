@@ -33,6 +33,7 @@ type Crypt struct {
 
 // Code is one row of the list shown by the UI.
 type Code struct {
+	Pinned  bool   `json:"pinned"`
 	ID      int    `json:"id"`
 	Issuer  string `json:"issuer"`
 	Account string `json:"account"`
@@ -216,7 +217,7 @@ func (s *Store) Codes() ([]Code, error) {
 	now := s.now()
 	codes := []Code{}
 	for _, current := range s.items {
-		code := Code{ID: current.id, Issuer: current.token.Issuer, Account: current.token.Account, Period: current.token.Period}
+		code := Code{Pinned: current.token.Pinned, ID: current.id, Issuer: current.token.Issuer, Account: current.token.Account, Period: current.token.Period}
 		if value, expires, err := current.token.Code(now); err != nil {
 			code.Error = err.Error()
 		} else {
@@ -311,6 +312,11 @@ func (s *Store) find(id int) (int, error) {
 
 // Rename changes the issuer and account of a token.
 func (s *Store) Rename(id int, issuer, account string) error {
+	return s.Edit(id, issuer, account, nil)
+}
+
+// Edit saves the name and optional pin state atomically.
+func (s *Store) Edit(id int, issuer, account string, pinned *bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	index, err := s.find(id)
@@ -323,6 +329,9 @@ func (s *Store) Rename(id int, issuer, account string) error {
 	}
 	updated := slices.Clone(s.items)
 	updated[index].token.Issuer, updated[index].token.Account = issuer, account
+	if pinned != nil {
+		updated[index].token.Pinned = *pinned
+	}
 	return s.commit(updated)
 }
 
@@ -427,4 +436,49 @@ func (s *Store) Reseal(key string) (int, error) {
 		return 0, err
 	}
 	return len(s.items), nil
+}
+
+// PinnedItem identifies a tray shortcut without exposing its secret or code.
+type PinnedItem struct {
+	ID    int
+	Label string
+}
+
+// Pinned returns the unlocked pins, sorted by their full displayed path.
+func (s *Store) Pinned() []PinnedItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := []PinnedItem{}
+	for _, current := range s.items {
+		if !current.token.Pinned {
+			continue
+		}
+		parts := []string{}
+		for _, part := range strings.Split(current.token.Issuer, "/") {
+			if part = strings.TrimSpace(part); part != "" {
+				parts = append(parts, part)
+			}
+		}
+		if current.token.Account != "" {
+			parts = append(parts, current.token.Account)
+		}
+		result = append(result, PinnedItem{current.id, strings.Join(parts, " / ")})
+	}
+	slices.SortStableFunc(result, func(a, b PinnedItem) int { return strings.Compare(strings.ToLower(a.Label), strings.ToLower(b.Label)) })
+	return result
+}
+
+// PinnedCode computes at click time and rejects removed or stale shortcuts.
+func (s *Store) PinnedCode(id int) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, err := s.find(id)
+	if err != nil {
+		return "", err
+	}
+	if !s.items[index].token.Pinned {
+		return "", i18n.Errorf("err.tokens.unknown")
+	}
+	value, _, err := s.items[index].token.Code(s.now())
+	return value, err
 }

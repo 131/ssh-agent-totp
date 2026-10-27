@@ -3,6 +3,7 @@
 package tray
 
 import (
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/131/ssh-agent-totp/internal/i18n"
+	"github.com/131/ssh-agent-totp/internal/tokens"
 )
 
 var (
@@ -84,6 +86,8 @@ type notifyIconData struct {
 }
 
 type Tray struct {
+	Pinned         func() []tokens.PinnedItem
+	CopyPinned     func(int)
 	hwnd           uintptr
 	original       uintptr
 	data           notifyIconData
@@ -164,6 +168,9 @@ func Install(hwnd uintptr) *Tray {
 
 func (t *Tray) add() { procNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&t.data))) }
 
+// Show restores the window to report a tray action error.
+func (t *Tray) Show() { t.restore() }
+
 func (t *Tray) restore() {
 	procShowWindow.Call(t.hwnd, swRestore)
 	procSetForeground.Call(t.hwnd)
@@ -177,6 +184,16 @@ func appendMenu(menu, flags, id uintptr, label string) {
 func (t *Tray) menu() {
 	menu, _, _ := procCreatePopupMenu.Call()
 	defer procDestroyMenu.Call(menu)
+	pins := []tokens.PinnedItem{}
+	if t.Pinned != nil {
+		pins = t.Pinned()
+	}
+	for index, pin := range pins {
+		appendMenu(menu, mfString, uintptr(index+3), strings.ReplaceAll(pin.Label, "&", "&&"))
+	}
+	if len(pins) > 0 {
+		procAppendMenu.Call(menu, mfSeparator, 0, 0)
+	}
 	appendMenu(menu, mfString, menuOpen, i18n.T("tray.open"))
 	procAppendMenu.Call(menu, mfSeparator, 0, 0)
 	appendMenu(menu, mfString, menuQuit, i18n.T("tray.quit"))
@@ -190,6 +207,10 @@ func (t *Tray) menu() {
 		t.restore()
 	case menuQuit:
 		t.Quit()
+	default:
+		if command >= 3 && command-3 < uintptr(len(pins)) && t.CopyPinned != nil {
+			t.CopyPinned(pins[command-3].ID)
+		}
 	}
 }
 

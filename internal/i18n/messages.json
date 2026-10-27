@@ -125,7 +125,8 @@
     "updates": "Mises à jour",
     "version": "Version",
     "window.close": "Fermer (reste dans la zone de notification)",
-    "window.minimize": "Réduire"
+    "window.minimize": "Réduire",
+    "rename.pinned": "Épingler dans le menu de la zone de notification"
   },
   "en-us": {
     "add": "Add, import, export",
@@ -253,6 +254,7 @@
     "updates": "Updates",
     "version": "Version",
     "window.close": "Close (stays in the notification area)",
-    "window.minimize": "Minimize"
+    "window.minimize": "Minimize",
+    "rename.pinned": "Pin to the tray menu"
   }
 }

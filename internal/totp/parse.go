@@ -80,7 +80,7 @@ func parseOTPAuth(link *url.URL) (Token, error) {
 	}
 	query := link.Query()
 	label := strings.TrimPrefix(link.Path, "/")
-	token := Token{Secret: query.Get("secret"), Issuer: query.Get("issuer"), Algorithm: query.Get("algorithm"), Account: label}
+	token := Token{Pinned: query.Get("pinned") == "true", Secret: query.Get("secret"), Issuer: query.Get("issuer"), Algorithm: query.Get("algorithm"), Account: label}
 	// The label is "issuer:account"; the issuer parameter wins, and may
 	// itself hold a colon.
 	if rest, found := strings.CutPrefix(label, token.Issuer+":"); token.Issuer != "" && found {
@@ -285,6 +285,9 @@ func (t Token) URI() string {
 		label = t.Issuer + ":" + t.Account
 	}
 	query := url.Values{"secret": {t.Secret}}
+	if t.Pinned {
+		query.Set("pinned", "true")
+	}
 	if t.Issuer != "" {
 		query.Set("issuer", t.Issuer)
 	}

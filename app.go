@@ -114,7 +114,11 @@ func (a *App) Handle(method string, args []json.RawMessage) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return nil, a.Tokens.Rename(id, issuer, account)
+		pinned, err := arg[bool](args, 3)
+		if err != nil {
+			return nil, err
+		}
+		return nil, a.Tokens.Edit(id, issuer, account, &pinned)
 	case "add":
 		// issuer, account, secret, algorithm, digits, period
 		var token totp.Token

@@ -293,3 +293,70 @@ func TestRenameFolder(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestPinnedShortcuts(t *testing.T) {
+	s, fail := store(t, "")
+	for _, issuer := range []string{"z/b/c", "a / b/c", "Hidden"} {
+		if err := s.Add(totp.Token{Issuer: issuer, Secret: "JBSWY3DPEHPK3PXP"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	codes, _ := s.Codes()
+	yes, no := true, false
+	for _, code := range codes {
+		if code.Issuer == "Hidden" {
+			continue
+		}
+		if err := s.Edit(code.ID, code.Issuer, "", &yes); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Load(); err != nil {
+		t.Fatal(err)
+	}
+	pins := s.Pinned()
+	if len(pins) != 2 || pins[0].Label != "a / b / c" || pins[1].Label != "z / b / c" {
+		t.Fatalf("pins: %+v", pins)
+	}
+	before, err := s.PinnedCode(pins[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Now = func() time.Time { return time.Unix(90, 0) }
+	after, err := s.PinnedCode(pins[0].ID)
+	if err != nil || before == after {
+		t.Fatalf("code not recomputed: %v", err)
+	}
+	*fail = true
+	if err := s.Edit(pins[0].ID, "Changed", "", &no); err == nil {
+		t.Fatal("expected failed save")
+	}
+	if got := s.Pinned(); len(got) != 2 || got[0].Label != pins[0].Label {
+		t.Fatal("failed save changed pins")
+	}
+	*fail = false
+	if err := s.Rename(pins[0].ID, "new/path", "account"); err != nil {
+		t.Fatal(err)
+	}
+	if s.Pinned()[0].Label != "new / path / account" {
+		t.Fatal("rename lost pin")
+	}
+	if err := s.Edit(pins[0].ID, "new/path", "account", &no); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PinnedCode(pins[0].ID); err == nil {
+		t.Fatal("unpinned code accepted")
+	}
+	if err := s.Delete(pins[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PinnedCode(pins[1].ID); err == nil {
+		t.Fatal("deleted code accepted")
+	}
+	if err := s.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Pinned()) != 0 {
+		t.Fatal("unpin not persisted")
+	}
+}

@@ -168,3 +168,5 @@ dialog .actions{justify-content:flex-end;margin-top:8px}
 dialog .section-head{margin-bottom:4px}
 #settings .key-select{min-width:0;max-width:190px}
 #settings dd.path{direction:rtl;text-align:right}
+
+#rename-pinned{width:auto;height:auto;display:inline;margin:0 6px 0 0}

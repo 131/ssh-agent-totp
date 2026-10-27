@@ -255,6 +255,8 @@ let renaming = null;
 function openRenameDialog(target, title, issuerLabel, help) {
   renaming = target; $('rename-title').textContent = title; $('rename-issuer-label').textContent = issuerLabel; $('rename-help').textContent = help;
   $('rename-account-label').hidden = Boolean(target.folder);
+  $('rename-pinned-label').hidden = Boolean(target.folder);
+  $('rename-pinned').checked = Boolean(target.pinned);
   $('rename').showModal(); $('rename-issuer').focus(); $('rename-issuer').select();
 }
 function openRename(code) { $('rename-issuer').value = code.issuer; $('rename-account').value = code.account; openRenameDialog(code, t('rename'), t('rename.issuer'), t('rename.help')); }
@@ -267,7 +269,7 @@ $('rename-form').addEventListener('submit', event => { event.preventDefault(); r
     $('rename').close(); await refresh(); notice(t('folder.renamed', moved, to.join('/') || '/'));
     return;
   }
-  await call('rename', renaming.id, $('rename-issuer').value, $('rename-account').value); $('rename').close(); await refresh(); notice(t('renamed'));
+  await call('rename', renaming.id, $('rename-issuer').value, $('rename-account').value, $('rename-pinned').checked); $('rename').close(); await refresh(); notice(t('renamed'));
 }); });
 for (const id of ['close-rename', 'cancel-rename']) $(id).addEventListener('click', () => $('rename').close());
 // Add dialog (+): one entry, the batch import box, the export (masked until

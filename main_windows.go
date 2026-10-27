@@ -53,6 +53,19 @@ func main() {
 	icon := tray.Install(hwnd)
 	icon.Borderless()
 	app.Copy = func(text string) error { return clipboard.Copy(hwnd, text) }
+	icon.Pinned = app.Tokens.Pinned
+	icon.CopyPinned = func(id int) {
+		go func() {
+			code, err := app.Tokens.PinnedCode(id)
+			if err == nil {
+				err = app.Copy(code)
+			}
+			if err != nil {
+				message, _ := json.Marshal(err.Error())
+				w.Dispatch(func() { icon.Show(); w.Eval("notice(" + string(message) + ", true)") })
+			}
+		}()
+	}
 	app.Window = func(action string) error {
 		done := make(chan bool)
 		w.Dispatch(func() { done <- icon.Frame(action) })

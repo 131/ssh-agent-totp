@@ -25,6 +25,7 @@ const (
 // Token is one TOTP account. Secret is the normalized base32 secret
 // (upper case, no padding nor spaces).
 type Token struct {
+	Pinned    bool
 	Issuer    string
 	Account   string
 	Secret    string
