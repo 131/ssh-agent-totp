@@ -76,6 +76,16 @@ const (
 	IconID          = 1
 )
 
+const (
+	clockTimerID    = 1
+	clickTimerID    = 2
+	firstPinCommand = 3
+	firstFrameID    = 2
+	copiedFrameID   = 32
+	menuFrameOffset = 32
+	lrShared        = 0x8000
+)
+
 type notifyIconData struct {
 	CbSize          uint32
 	Wnd             uintptr
@@ -135,13 +145,16 @@ func ActivateExisting(waitPrevious bool) bool {
 		if err != windows.ERROR_ALREADY_EXISTS {
 			return false
 		}
+
 		if !waitPrevious || attempt == 75 {
 			break
 		}
 		// Our handle keeps the mutex alive: release it before retrying.
+
 		windows.CloseHandle(windows.Handle(handle))
 		time.Sleep(200 * time.Millisecond)
 	}
+
 	class, _ := windows.UTF16PtrFromString("webview")
 	title, _ := windows.UTF16PtrFromString(WindowTitle)
 	if hwnd, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title))); hwnd != 0 {
@@ -161,10 +174,12 @@ func Scale(value uint) uint {
 	if procGetDpiForSystem.Find() != nil {
 		return value
 	}
+
 	dpi, _, _ := procGetDpiForSystem.Call()
 	if dpi == 0 {
 		return value
 	}
+
 	return value * uint(dpi) / 96
 }
 
@@ -175,8 +190,8 @@ func Install(hwnd uintptr, ticks *clock.Clock) *Tray {
 	t.instance = instance
 	cx, _, _ := procGetSystemMetric.Call(smCxSmIcon)
 	cy, _, _ := procGetSystemMetric.Call(smCySmIcon)
-	icon, _, _ := procLoadImage.Call(uintptr(instance), IconID, imageIcon, cx, cy, 0x8000)
-	t.menuIcon, _, _ = procLoadImage.Call(uintptr(instance), IconID+32, imageIcon, cx, cy, 0x8000)
+	icon, _, _ := procLoadImage.Call(uintptr(instance), IconID, imageIcon, cx, cy, lrShared)
+	t.menuIcon, _, _ = procLoadImage.Call(uintptr(instance), IconID+menuFrameOffset, imageIcon, cx, cy, lrShared)
 	t.data = notifyIconData{Wnd: hwnd, ID: 1, Flags: nifMessage | nifIcon | nifTip, CallbackMessage: wmTray, Icon: icon}
 	t.data.CbSize = uint32(unsafe.Sizeof(t.data))
 	copy(t.data.Tip[:len(t.data.Tip)-1], windows.StringToUTF16(WindowTitle))
@@ -186,7 +201,7 @@ func Install(hwnd uintptr, ticks *clock.Clock) *Tray {
 	t.original, _, _ = procSetWindowLong.Call(hwnd, gwlpWndProc, syscall.NewCallback(t.wndproc))
 	ticks.Subscribe(t.spin)
 	ticks.Subscribe(func(clock.Tick) { t.updateMenuIcon() })
-	procSetTimer.Call(hwnd, 1, 1000, 0)
+	procSetTimer.Call(hwnd, clockTimerID, 1000, 0)
 	return t
 }
 
@@ -219,14 +234,16 @@ func (t *Tray) menu() {
 			t.AfterModal()
 		}
 	}()
+
 	pins := []tokens.PinnedItem{}
 	if t.Pinned != nil {
 		pins = t.Pinned()
 	}
 	t.menuPinCount = len(pins)
 	for index, pin := range pins {
-		appendMenu(menu, mfString, uintptr(index+3), strings.ReplaceAll(pin.Label, "&", "&&"))
+		appendMenu(menu, mfString, uintptr(index+firstPinCommand), strings.ReplaceAll(pin.Label, "&", "&&"))
 	}
+
 	if len(pins) > 0 {
 		procAppendMenu.Call(menu, mfSeparator, 0, 0)
 	}
@@ -245,8 +262,8 @@ func (t *Tray) menu() {
 	case menuQuit:
 		t.Quit()
 	default:
-		if command >= 3 && command-3 < uintptr(len(pins)) && t.CopyPinned != nil {
-			t.CopyPinned(pins[command-3].ID)
+		if command >= firstPinCommand && command-firstPinCommand < uintptr(len(pins)) && t.CopyPinned != nil {
+			t.CopyPinned(pins[command-firstPinCommand].ID)
 		}
 	}
 }
@@ -258,21 +275,24 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	case msg == wmDispatch:
 		t.runDispatched()
 		return 0
+
 	case msg == wmTray:
 		switch lparam & 0xffff {
+
 		case wmLButtonUp:
 			if t.doubleClick {
 				t.doubleClick = false
 				break
 			}
+
 			delay, _, _ := procDoubleClickTime.Call()
-			procSetTimer.Call(hwnd, 2, delay, 0)
+			procSetTimer.Call(hwnd, clickTimerID, delay, 0)
 		case wmLButtonDblClk:
-			procKillTimer.Call(hwnd, 2)
+			procKillTimer.Call(hwnd, clickTimerID)
 			t.doubleClick = true
 			t.restore()
 		case wmRButtonUp:
-			procKillTimer.Call(hwnd, 2)
+			procKillTimer.Call(hwnd, clickTimerID)
 			t.menu()
 		}
 		return 0
@@ -280,11 +300,11 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		if t.AfterModal != nil {
 			t.AfterModal()
 		}
-	case msg == wmTimer && wparam == 1:
+	case msg == wmTimer && wparam == clockTimerID:
 		t.clock.Fire(time.Now())
 		return 0
-	case msg == wmTimer && wparam == 2:
-		procKillTimer.Call(hwnd, 2)
+	case msg == wmTimer && wparam == clickTimerID:
+		procKillTimer.Call(hwnd, clickTimerID)
 		t.menu()
 		return 0
 	case msg == t.taskbarCreated && msg != 0:
@@ -296,8 +316,8 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		procShowWindow.Call(hwnd, swHide)
 		return 0
 	case msg == wmDestroy:
-		procKillTimer.Call(hwnd, 1)
-		procKillTimer.Call(hwnd, 2)
+		procKillTimer.Call(hwnd, clockTimerID)
+		procKillTimer.Call(hwnd, clickTimerID)
 		procNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&t.data)))
 	}
 	result, _, _ := procCallWindowProc.Call(t.original, hwnd, msg, wparam, lparam)
@@ -309,14 +329,14 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 
 // spin reuses shared icon resources: one sector per second, no drawing loop.
 func (t *Tray) spin(tick clock.Tick) {
-	id := uintptr(2 + tick.Modulus)
+	id := uintptr(firstFrameID + tick.Modulus)
 	if tick.Now < t.flashUntil.UnixMilli() && tick.Modulus%2 == 0 {
-		id = 32
+		id = copiedFrameID
 	}
 	cx, _, _ := procGetSystemMetric.Call(smCxSmIcon)
 	cy, _, _ := procGetSystemMetric.Call(smCySmIcon)
-	t.data.Icon, _, _ = procLoadImage.Call(uintptr(t.instance), id, imageIcon, cx, cy, 0x8000)
-	t.menuIcon, _, _ = procLoadImage.Call(uintptr(t.instance), id+32, imageIcon, cx, cy, 0x8000)
+	t.data.Icon, _, _ = procLoadImage.Call(uintptr(t.instance), id, imageIcon, cx, cy, lrShared)
+	t.menuIcon, _, _ = procLoadImage.Call(uintptr(t.instance), id+menuFrameOffset, imageIcon, cx, cy, lrShared)
 	t.data.Flags = nifIcon
 	procNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&t.data)))
 }

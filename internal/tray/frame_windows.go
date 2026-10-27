@@ -36,8 +36,14 @@ const (
 
 // Hit codes of the resize edges, as sent by the UI.
 var edges = map[string]uintptr{
-	"left": 10, "right": 11, "top": 12, "top-left": 13, "top-right": 14,
-	"bottom": 15, "bottom-left": 16, "bottom-right": 17,
+	"left":         10,
+	"right":        11,
+	"top":          12,
+	"top-left":     13,
+	"top-right":    14,
+	"bottom":       15,
+	"bottom-left":  16,
+	"bottom-right": 17,
 }
 
 // Borderless removes the title bar; the window cannot be maximized.
@@ -66,11 +72,13 @@ func (t *Tray) Frame(action string) bool {
 		procShowWindow.Call(t.hwnd, swMinimize)
 	case "close":
 		procPostMessage.Call(t.hwnd, wmClose, 0, 0)
+
 	default:
 		edge, ok := edges[action]
 		if !ok {
 			return false
 		}
+
 		procReleaseCapture.Call()
 		procPostMessage.Call(t.hwnd, wmNcLButtonDown, edge, 0)
 	}

@@ -54,6 +54,7 @@ func Key(secret string) ([]byte, error) {
 	if err != nil || len(key) == 0 {
 		return nil, i18n.Errorf("err.totp.secret")
 	}
+
 	return key, nil
 }
 
@@ -74,15 +75,19 @@ func (t *Token) Normalize() error {
 	if _, err := Key(t.Secret); err != nil {
 		return err
 	}
+
 	if newHash(t.Algorithm) == nil {
 		return i18n.Errorf("err.totp.algorithm", t.Algorithm)
 	}
+
 	if t.Digits < 6 || t.Digits > 8 {
 		return i18n.Errorf("err.totp.digits", t.Digits)
 	}
+
 	if t.Period < 1 || t.Period > 3600 {
 		return i18n.Errorf("err.totp.period", t.Period)
 	}
+
 	return nil
 }
 
@@ -103,6 +108,7 @@ func (t Token) Code(now time.Time) (string, time.Time, error) {
 	if err := t.Normalize(); err != nil {
 		return "", time.Time{}, err
 	}
+
 	key, _ := Key(t.Secret)
 	period := int64(t.Period)
 	counter := now.Unix() / period
@@ -115,6 +121,7 @@ func (t Token) Code(now time.Time) (string, time.Time, error) {
 	for range t.Digits {
 		modulo *= 10
 	}
+
 	return fmt.Sprintf("%0*d", t.Digits, value%modulo), time.Unix((counter+1)*period, 0), nil
 }
 

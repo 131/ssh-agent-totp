@@ -31,6 +31,7 @@ func Parse(text string) ([]Token, []Skipped) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
 		uris := uriPattern.FindAllString(line, -1)
 		if len(uris) == 0 {
 			token, err := parseBare(line)
@@ -38,9 +39,11 @@ func Parse(text string) ([]Token, []Skipped) {
 				skipped = append(skipped, Skipped{Line: line, Reason: err.Error()})
 				continue
 			}
+
 			tokens = append(tokens, token)
 			continue
 		}
+
 		for _, uri := range uris {
 			found, err := ParseURI(uri)
 			if err != nil {
@@ -49,6 +52,7 @@ func Parse(text string) ([]Token, []Skipped) {
 			tokens = append(tokens, found...)
 		}
 	}
+
 	return tokens, skipped
 }
 
@@ -58,12 +62,15 @@ func ParseURI(uri string) ([]Token, error) {
 	if err != nil {
 		return nil, i18n.Errorf("err.totp.uri")
 	}
+
 	switch link.Scheme {
+
 	case "otpauth":
 		token, err := parseOTPAuth(link)
 		if err != nil {
 			return nil, err
 		}
+
 		return []Token{token}, nil
 	case "otpauth-migration":
 		return parseMigration(link)
@@ -75,12 +82,20 @@ func parseOTPAuth(link *url.URL) (Token, error) {
 	if strings.ToLower(link.Host) == "hotp" {
 		return Token{}, i18n.Errorf("err.totp.hotp")
 	}
+
 	if strings.ToLower(link.Host) != "totp" {
 		return Token{}, i18n.Errorf("err.totp.uri")
 	}
+
 	query := link.Query()
 	label := strings.TrimPrefix(link.Path, "/")
-	token := Token{Pinned: query.Get("pinned") == "true", Secret: query.Get("secret"), Issuer: query.Get("issuer"), Algorithm: query.Get("algorithm"), Account: label}
+	token := Token{
+		Pinned:    query.Get("pinned") == "true",
+		Secret:    query.Get("secret"),
+		Issuer:    query.Get("issuer"),
+		Algorithm: query.Get("algorithm"),
+		Account:   label,
+	}
 	// The label is "issuer:account"; the issuer parameter wins, and may
 	// itself hold a colon.
 	if rest, found := strings.CutPrefix(label, token.Issuer+":"); token.Issuer != "" && found {
@@ -97,9 +112,11 @@ func parseOTPAuth(link *url.URL) (Token, error) {
 			if err != nil {
 				return Token{}, i18n.Errorf("err.totp.number", name)
 			}
+
 			*target = number
 		}
 	}
+
 	return token, token.Normalize()
 }
 
@@ -114,6 +131,7 @@ func parseBare(line string) (Token, error) {
 	if start < 0 {
 		return Token{}, i18n.Errorf("err.totp.unknown")
 	}
+
 	label := strings.Join(words[:start], " ")
 	if before, after, found := strings.Cut(words[start], ":"); found && after != "" && secretStart([]string{after}) == 0 {
 		// "label:SECRET" glued together.
@@ -132,6 +150,7 @@ func secretStart(words []string) int {
 	if start < 0 {
 		return -1
 	}
+
 	last := words[start]
 	if index := strings.LastIndex(last, ":"); index >= 0 {
 		last = last[index+1:]
@@ -148,9 +167,11 @@ func secretStart(words []string) int {
 	if len(NormalizeSecret(secret)) < 16 || !base32Text.MatchString(secret) {
 		return -1
 	}
+
 	if _, err := Key(secret); err != nil {
 		return -1
 	}
+
 	return start
 }
 
@@ -169,12 +190,14 @@ func parseMigration(link *url.URL) ([]Token, error) {
 	if err != nil || len(payload) == 0 {
 		return nil, i18n.Errorf("err.totp.migration")
 	}
+
 	var tokens []Token
 	var problems []string
 	err = protoFields(payload, func(field int, value []byte, _ uint64) error {
 		if field != 1 || value == nil {
 			return nil
 		}
+
 		token, hotp, err := migrationEntry(value)
 		switch {
 		case err != nil:
@@ -191,9 +214,11 @@ func parseMigration(link *url.URL) ([]Token, error) {
 	if err != nil {
 		return nil, i18n.Errorf("err.totp.migration")
 	}
+
 	if len(problems) > 0 {
 		return tokens, errors.New(strings.Join(problems, "; "))
 	}
+
 	return tokens, nil
 }
 
@@ -231,38 +256,46 @@ func protoFields(message []byte, visit func(field int, value []byte, number uint
 		if n == 0 {
 			return errors.New("protobuf")
 		}
+
 		message = message[n:]
 		field := int(tag >> 3)
 		switch tag & 7 {
+
 		case 0:
 			number, n := varint(message)
 			if n == 0 {
 				return errors.New("protobuf")
 			}
+
 			message = message[n:]
 			if err := visit(field, nil, number); err != nil {
 				return err
 			}
+
 		case 2:
 			size, n := varint(message)
 			if n == 0 || uint64(len(message)-n) < size {
 				return errors.New("protobuf")
 			}
+
 			value := message[n : n+int(size)]
 			message = message[n+int(size):]
 			if err := visit(field, value, 0); err != nil {
 				return err
 			}
+
 		case 1, 5:
 			width := map[uint64]int{1: 8, 5: 4}[tag&7]
 			if len(message) < width {
 				return errors.New("protobuf")
 			}
+
 			message = message[width:]
 		default:
 			return errors.New("protobuf")
 		}
 	}
+
 	return nil
 }
 
@@ -274,6 +307,7 @@ func varint(buffer []byte) (uint64, int) {
 			return value, i + 1
 		}
 	}
+
 	return 0, 0
 }
 

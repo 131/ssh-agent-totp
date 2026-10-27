@@ -22,20 +22,25 @@ func AgentKeys(address string) ([]AgentKey, error) {
 	if address == "" {
 		return nil, i18n.Errorf("err.agent.none")
 	}
+
 	conn, err := sshagentcrypt.DialAgent(address)
 	if err != nil {
 		return nil, i18n.Errorf("err.agent.unreachable")
 	}
+
 	defer conn.Close()
+
 	keys, err := agent.NewClient(conn).List()
 	if err != nil {
 		return nil, i18n.Errorf("err.agent.list")
 	}
+
 	result := []AgentKey{}
 	for _, key := range keys {
 		line := key.Type() + " " + base64.StdEncoding.EncodeToString(key.Marshal())
 		result = append(result, AgentKey{Key: line, Comment: key.Comment, Fingerprint: ssh.FingerprintSHA256(key)})
 	}
+
 	return result, nil
 }
 

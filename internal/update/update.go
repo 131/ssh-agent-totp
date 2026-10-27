@@ -58,9 +58,16 @@ type Release struct {
 }
 
 func New(current string, store *settings.Store, verify func(candidate, current string) error) *Updater {
-	return &Updater{GitHub: "https://github.com", Raw: "https://raw.githubusercontent.com",
-		HTTP: &http.Client{Timeout: 2 * time.Minute}, Current: current, Settings: store,
-		Now: time.Now, Executable: os.Executable, Verify: verify}
+	return &Updater{
+		GitHub:     "https://github.com",
+		Raw:        "https://raw.githubusercontent.com",
+		HTTP:       &http.Client{Timeout: 2 * time.Minute},
+		Current:    current,
+		Settings:   store,
+		Now:        time.Now,
+		Executable: os.Executable,
+		Verify:     verify,
+	}
 }
 
 // repository returns /<owner>/<repo> of a https://github.com/<owner>/<repo>
@@ -74,6 +81,7 @@ func repository(upstream string) (string, error) {
 	if err != nil || link.Scheme != "https" || link.Host != "github.com" || len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", i18n.Errorf("err.upstream", upstream)
 	}
+
 	return "/" + parts[0] + "/" + parts[1], nil
 }
 
@@ -90,13 +98,16 @@ func (u *Updater) channels(refresh bool) (settings.Settings, error) {
 	if err != nil || !current.Update.Enable || (!refresh && current.RemoteChannels.Fresh(current.Update.Upstream, u.Now())) {
 		return current, err
 	}
+
 	list, err := u.fetchManifest(current.Update.Upstream)
 	if err != nil {
 		if cache := current.RemoteChannels; !refresh && cache != nil && cache.Upstream == current.Update.Upstream && len(cache.List) > 0 {
 			return current, nil
 		}
+
 		return current, err
 	}
+
 	ttl := settings.DefaultTTL
 	if current.RemoteChannels != nil && current.RemoteChannels.TTL > 0 {
 		ttl = current.RemoteChannels.TTL
@@ -111,32 +122,40 @@ func (u *Updater) fetchManifest(upstream string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	response, err := u.HTTP.Get(u.Raw + repo + "/HEAD/manifest.json")
 	if err != nil {
 		return nil, err
 	}
+
 	if response.StatusCode == http.StatusNotFound {
 		response.Body.Close()
 		return nil, i18n.Errorf("err.manifest.missing", upstream)
 	}
+
 	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
 		return nil, i18n.Errorf("err.download", u.Raw+repo+"/HEAD/manifest.json", response.StatusCode)
 	}
+
 	defer response.Body.Close()
+
 	var manifest map[string]any
 	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&manifest); err != nil {
 		return nil, i18n.Errorf("err.manifest", err)
 	}
+
 	list := map[string]string{}
 	for channel, tag := range manifest {
 		if tag, ok := tag.(string); ok && validTag(tag) {
 			list[channel] = tag
 		}
 	}
+
 	if len(list) == 0 {
 		return nil, i18n.Errorf("err.manifest.empty")
 	}
+
 	return list, nil
 }
 
@@ -151,6 +170,7 @@ func (u *Updater) newer(tag string) bool {
 	if u.development() {
 		return false
 	}
+
 	current, _ := semver.NewVersion(u.Current)
 	latest, err := semver.NewVersion(tag)
 	return err == nil && latest.GreaterThan(current)
@@ -176,17 +196,21 @@ func (u *Updater) check(refresh bool) (Release, error) {
 	if err != nil || !release.Enabled {
 		return release, err
 	}
+
 	list := current.RemoteChannels.List
 	for channel := range list {
 		release.Channels = append(release.Channels, channel)
 	}
+
 	slices.SortFunc(release.Channels, func(a, b string) int {
 		if (a == settings.DefaultChannel) != (b == settings.DefaultChannel) {
 			if a == settings.DefaultChannel {
 				return -1
 			}
+
 			return 1
 		}
+
 		return strings.Compare(a, b)
 	})
 	if _, ok := list[current.Update.Channel]; ok {
@@ -196,6 +220,7 @@ func (u *Updater) check(refresh bool) (Release, error) {
 	if !ok {
 		return release, nil
 	}
+
 	base, _ := u.releases(current.Update.Upstream)
 	release.Latest, release.URL = tag, base+"/tag/"+tag
 	release.Available = u.newer(tag)
@@ -207,6 +232,7 @@ func (u *Updater) SetEnabled(enable bool) (Release, error) {
 	if _, err := u.Settings.Update(func(s *settings.Settings) { s.Update.Enable = enable }); err != nil {
 		return Release{}, err
 	}
+
 	return u.Check()
 }
 
@@ -216,15 +242,19 @@ func (u *Updater) SetChannel(channel string) (Release, error) {
 	if err != nil {
 		return Release{}, err
 	}
+
 	if !current.Update.Enable {
 		return Release{}, i18n.Errorf("err.update.disabled")
 	}
+
 	if _, ok := current.RemoteChannels.List[channel]; !ok {
 		return Release{}, i18n.Errorf("err.channel", channel)
 	}
+
 	if _, err := u.Settings.Update(func(s *settings.Settings) { s.Update.Channel = channel }); err != nil {
 		return Release{}, err
 	}
+
 	return u.Check()
 }
 
@@ -233,10 +263,12 @@ func (u *Updater) get(url string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
 		return nil, i18n.Errorf("err.download", url, response.StatusCode)
 	}
+
 	return response, nil
 }
 
@@ -245,7 +277,9 @@ func (u *Updater) checksum(base, tag string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	defer response.Body.Close()
+
 	scanner := bufio.NewScanner(io.LimitReader(response.Body, 1<<20))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
@@ -253,6 +287,7 @@ func (u *Updater) checksum(base, tag string) (string, error) {
 			return strings.ToLower(fields[0]), nil
 		}
 	}
+
 	return "", i18n.Errorf("err.sums", AssetName)
 }
 
@@ -263,30 +298,37 @@ func (u *Updater) Install(tag string) (string, error) {
 	if !validTag(tag) || !u.newer(tag) {
 		return "", i18n.Errorf("err.downgrade", tag, u.Current)
 	}
+
 	config, err := u.Settings.Load()
 	if err != nil {
 		return "", err
 	}
+
 	if !config.Update.Enable {
 		return "", i18n.Errorf("err.update.disabled")
 	}
+
 	base, err := u.releases(config.Update.Upstream)
 	if err != nil {
 		return "", err
 	}
+
 	expected, err := u.checksum(base, tag)
 	if err != nil {
 		return "", err
 	}
+
 	current, err := u.Executable()
 	if err != nil {
 		return "", err
 	}
+
 	candidate := current + ".new"
 	if err := u.download(base+"/download/"+tag+"/"+AssetName, candidate, expected); err != nil {
 		os.Remove(candidate)
 		return "", err
 	}
+
 	if u.Verify != nil {
 		if err := u.Verify(candidate, current); err != nil {
 			os.Remove(candidate)
@@ -299,11 +341,13 @@ func (u *Updater) Install(tag string) (string, error) {
 		os.Remove(candidate)
 		return "", err
 	}
+
 	if err := os.Rename(candidate, current); err != nil {
 		os.Rename(previous, current)
 		os.Remove(candidate)
 		return "", err
 	}
+
 	return current, nil
 }
 
@@ -312,11 +356,14 @@ func (u *Updater) download(url, path, expected string) error {
 	if err != nil {
 		return err
 	}
+
 	defer response.Body.Close()
+
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
 		return err
 	}
+
 	hash := sha256.New()
 	written, err := io.Copy(io.MultiWriter(file, hash), io.LimitReader(response.Body, maxAsset+1))
 	if closeErr := file.Close(); err == nil {
@@ -325,12 +372,15 @@ func (u *Updater) download(url, path, expected string) error {
 	if err != nil {
 		return err
 	}
+
 	if written > maxAsset {
 		return i18n.Errorf("err.too.large")
 	}
+
 	if hex.EncodeToString(hash.Sum(nil)) != expected {
 		return i18n.Errorf("err.checksum")
 	}
+
 	return nil
 }
 

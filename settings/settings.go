@@ -83,6 +83,7 @@ func (s *Store) TokensPath(settings Settings) string {
 	if settings.Tokens.Path == "" {
 		return filepath.Join(filepath.Dir(s.Path), "tokens.crypt")
 	}
+
 	return os.Expand(windowsVariables.ReplaceAllString(settings.Tokens.Path, "$${$1}"), os.Getenv)
 }
 
@@ -104,6 +105,7 @@ func DefaultStore() *Store {
 	if err != nil {
 		return &Store{}
 	}
+
 	return &Store{Path: filepath.Join(dir, "ssh-agent-totp", "settings.yml")}
 }
 
@@ -112,16 +114,19 @@ func (s *Store) read() (Settings, error) {
 	if s.Path == "" {
 		return settings, i18n.Errorf("err.settings.dir")
 	}
+
 	body, err := os.ReadFile(s.Path)
 	if errors.Is(err, os.ErrNotExist) {
 		return settings, nil
 	}
+
 	if err == nil {
 		err = yaml.Unmarshal(body, &settings)
 	}
 	if err != nil {
 		return Defaults(), i18n.Errorf("err.settings.read", s.Path, err)
 	}
+
 	settings.normalize()
 	return settings, nil
 }
@@ -130,6 +135,7 @@ func (s *Store) read() (Settings, error) {
 func (s *Store) Load() (Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.read()
 }
 
@@ -138,22 +144,27 @@ func (s *Store) Load() (Settings, error) {
 func (s *Store) Update(change func(*Settings)) (Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	settings, err := s.read()
 	if err != nil {
 		return settings, err
 	}
+
 	change(&settings)
 	settings.normalize()
 	body, err := yaml.Marshal(settings)
 	if err != nil {
 		return settings, err
 	}
+
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
 		return settings, err
 	}
+
 	temporary := s.Path + ".tmp"
 	if err := os.WriteFile(temporary, append([]byte(header), body...), 0o600); err != nil {
 		return settings, err
 	}
+
 	return settings, os.Rename(temporary, s.Path)
 }

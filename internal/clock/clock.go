@@ -3,6 +3,8 @@ package clock
 
 import "time"
 
+const visualPeriod = 30
+
 type Tick struct {
 	Now     int64
 	Modulus int64
@@ -21,8 +23,9 @@ func (c *Clock) Subscribe(listener func(Tick)) {
 
 func (c *Clock) Fire(now time.Time) {
 	now = now.Truncate(time.Second)
-	modulus := now.Unix() % 30
-	tick := Tick{Now: now.UnixMilli(), Modulus: modulus, Percent: float64(modulus) * 100 / 30}
+	modulus := now.Unix() % visualPeriod
+	tick := Tick{Now: now.UnixMilli(), Modulus: modulus, Percent: float64(modulus) * 100 / visualPeriod}
+
 	for _, listener := range c.listeners {
 		listener(tick)
 	}

@@ -13,6 +13,7 @@ func (t *Tray) Dispatch(f func()) {
 	t.dispatch.mu.Lock()
 	t.dispatch.queue = append(t.dispatch.queue, f)
 	t.dispatch.mu.Unlock()
+
 	procPostMessage.Call(t.hwnd, wmDispatch, 0, 0)
 }
 
@@ -21,6 +22,7 @@ func (t *Tray) runDispatched() {
 	queue := t.dispatch.queue
 	t.dispatch.queue = nil
 	t.dispatch.mu.Unlock()
+
 	for _, f := range queue {
 		f()
 	}

@@ -31,6 +31,7 @@ func main() {
 	if tray.ActivateExisting(slices.Contains(os.Args[1:], updatedFlag)) {
 		return
 	}
+
 	update.Cleanup()
 	app := NewApp(openBrowser)
 	data := ""
@@ -42,13 +43,18 @@ func main() {
 		AutoFocus: true,
 		DataPath:  data,
 		WindowOptions: webview.WindowOptions{
-			Title: tray.WindowTitle, Width: tray.Scale(360), Height: tray.Scale(560), Center: true, IconId: tray.IconID,
+			Title:  tray.WindowTitle,
+			Width:  tray.Scale(360),
+			Height: tray.Scale(560),
+			Center: true,
+			IconId: tray.IconID,
 		},
 	})
 	if w == nil {
 		os.Exit(1)
 	}
 	defer w.Destroy()
+
 	w.SetSize(int(tray.Scale(280)), int(tray.Scale(300)), webview.HintMin)
 	hwnd := uintptr(w.Window())
 	var ticks clock.Clock
@@ -56,13 +62,16 @@ func main() {
 	icon.Borderless()
 	// Wake WebView2's own binding completions after a native modal loop.
 	icon.AfterModal = func() { w.Dispatch(func() {}) }
+
 	app.Copy = func(text string) error {
 		if err := clipboard.Copy(hwnd, text); err != nil {
 			return err
 		}
+
 		icon.Dispatch(icon.Copied)
 		return nil
 	}
+
 	icon.Pinned = app.Tokens.Pinned
 	icon.CopyPinned = func(id int) {
 		go func() {
@@ -76,19 +85,23 @@ func main() {
 			}
 		}()
 	}
+
 	app.Window = func(action string) error {
 		done := make(chan bool)
 		icon.Dispatch(func() { done <- icon.Frame(action) })
 		if !<-done {
 			return i18n.Errorf("err.window")
 		}
+
 		return nil
 	}
+
 	app.Relaunch = func(path string) error {
 		command := exec.Command(path, updatedFlag)
 		if err := command.Start(); err != nil {
 			return err
 		}
+
 		command.Process.Release()
 		icon.Dispatch(icon.Quit)
 		return nil

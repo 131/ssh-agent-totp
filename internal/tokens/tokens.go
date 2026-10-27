@@ -68,6 +68,7 @@ func (s *Store) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
 	}
+
 	return time.Now()
 }
 
@@ -76,6 +77,7 @@ func (s *Store) stat() (time.Time, int64) {
 	if err != nil {
 		return time.Time{}, -1
 	}
+
 	return info.ModTime(), info.Size()
 }
 
@@ -90,6 +92,7 @@ func Parse(body []byte) ([]totp.Token, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
 		found, err := totp.ParseURI(line)
 		if err == nil && !strings.HasPrefix(strings.ToLower(line), "otpauth://") {
 			err = i18n.Errorf("err.totp.uri")
@@ -97,8 +100,10 @@ func Parse(body []byte) ([]totp.Token, error) {
 		if err != nil {
 			return nil, i18n.Errorf("err.tokens.line", index+1, err)
 		}
+
 		result = append(result, found...)
 	}
+
 	return result, nil
 }
 
@@ -110,6 +115,7 @@ func Marshal(tokens []totp.Token) []byte {
 	for _, token := range tokens {
 		body.WriteString(token.URI() + "\n")
 	}
+
 	return []byte(body.String())
 }
 
@@ -118,6 +124,7 @@ func Marshal(tokens []totp.Token) []byte {
 func (s *Store) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.load()
 }
 
@@ -140,15 +147,18 @@ func (s *Store) load() error {
 	if err != nil {
 		return i18n.Errorf("err.tokens.read", s.Path, err)
 	}
+
 	s.items, s.loaded = nil, true
 	for _, token := range found {
 		s.nextID++
 		s.items = append(s.items, item{id: s.nextID, token: token})
 	}
+
 	sortItems(s.items)
 	if clear {
 		return s.save(false)
 	}
+
 	s.modified, s.size = s.stat()
 	return nil
 }
@@ -158,6 +168,7 @@ func (s *Store) fresh() error {
 	if modified, size := s.stat(); !s.loaded || !modified.Equal(s.modified) || size != s.size {
 		return s.load()
 	}
+
 	return nil
 }
 
@@ -166,6 +177,7 @@ func (s *Store) tokens() []totp.Token {
 	for _, current := range s.items {
 		tokens = append(tokens, current.token)
 	}
+
 	return tokens
 }
 
@@ -177,9 +189,11 @@ func (s *Store) save(backup bool) error {
 	if err != nil {
 		return i18n.Errorf("err.tokens.seal", err)
 	}
+
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
 		return err
 	}
+
 	if previous, err := os.ReadFile(s.Path); backup && err == nil {
 		os.WriteFile(s.Path+".bak", previous, 0o600)
 	}
@@ -187,9 +201,11 @@ func (s *Store) save(backup bool) error {
 	if err := os.WriteFile(temporary, []byte(strings.TrimSpace(armored)+"\n"), 0o600); err != nil {
 		return err
 	}
+
 	if err := os.Rename(temporary, s.Path); err != nil {
 		return err
 	}
+
 	s.modified, s.size = s.stat()
 	return nil
 }
@@ -211,13 +227,21 @@ func sortKey(token totp.Token) string {
 func (s *Store) Codes() ([]Code, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if err := s.fresh(); err != nil {
 		return nil, err
 	}
+
 	now := s.now()
 	codes := []Code{}
 	for _, current := range s.items {
-		code := Code{Pinned: current.token.Pinned, ID: current.id, Issuer: current.token.Issuer, Account: current.token.Account, Period: current.token.Period}
+		code := Code{
+			Pinned:  current.token.Pinned,
+			ID:      current.id,
+			Issuer:  current.token.Issuer,
+			Account: current.token.Account,
+			Period:  current.token.Period,
+		}
 		if value, expires, err := current.token.Code(now); err != nil {
 			code.Error = err.Error()
 		} else {
@@ -225,6 +249,7 @@ func (s *Store) Codes() ([]Code, error) {
 		}
 		codes = append(codes, code)
 	}
+
 	return codes, nil
 }
 
@@ -249,18 +274,22 @@ func (s *Store) Import(text string) (ImportResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if err := s.fresh(); err != nil {
 		return result, err
 	}
+
 	updated, added, duplicates := s.with(found)
 	result.Added, result.Duplicates = added, duplicates
 	if added == 0 {
 		return result, nil
 	}
+
 	if err := s.commit(updated); err != nil {
 		result.Added = 0
 		return result, err
 	}
+
 	return result, nil
 }
 
@@ -272,10 +301,12 @@ func (s *Store) with(found []totp.Token) (updated []item, added, duplicates int)
 			duplicates++
 			continue
 		}
+
 		s.nextID++
 		updated = append(updated, item{id: s.nextID, token: token})
 		added++
 	}
+
 	return updated, added, duplicates
 }
 
@@ -284,18 +315,23 @@ func (s *Store) Add(token totp.Token) error {
 	if token.Issuer = strings.TrimSpace(token.Issuer); token.Issuer == "" && strings.TrimSpace(token.Account) == "" {
 		return i18n.Errorf("err.tokens.label")
 	}
+
 	if err := token.Normalize(); err != nil {
 		return err
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if err := s.fresh(); err != nil {
 		return err
 	}
+
 	updated, added, _ := s.with([]totp.Token{token})
 	if added == 0 {
 		return i18n.Errorf("err.tokens.duplicate")
 	}
+
 	return s.commit(updated)
 }
 
@@ -303,10 +339,12 @@ func (s *Store) find(id int) (int, error) {
 	if err := s.fresh(); err != nil {
 		return -1, err
 	}
+
 	index := slices.IndexFunc(s.items, func(current item) bool { return current.id == id })
 	if index < 0 {
 		return -1, i18n.Errorf("err.tokens.unknown")
 	}
+
 	return index, nil
 }
 
@@ -319,10 +357,12 @@ func (s *Store) Rename(id int, issuer, account string) error {
 func (s *Store) Pin(id int, pinned bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	index, err := s.find(id)
 	if err != nil {
 		return err
 	}
+
 	updated := slices.Clone(s.items)
 	updated[index].token.Pinned = pinned
 	return s.commit(updated)
@@ -332,14 +372,17 @@ func (s *Store) Pin(id int, pinned bool) error {
 func (s *Store) Edit(id int, issuer, account string, pinned *bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	index, err := s.find(id)
 	if err != nil {
 		return err
 	}
+
 	issuer, account = strings.TrimSpace(issuer), strings.TrimSpace(account)
 	if issuer == "" && account == "" {
 		return i18n.Errorf("err.tokens.label")
 	}
+
 	updated := slices.Clone(s.items)
 	updated[index].token.Issuer, updated[index].token.Account = issuer, account
 	if pinned != nil {
@@ -361,17 +404,21 @@ func (s *Store) RenameFolder(from, to string) (int, error) {
 				parts = append(parts, part)
 			}
 		}
+
 		return strings.Join(parts, "/")
 	}
 	from, to = clean(from), clean(to)
 	if from == "" {
 		return 0, i18n.Errorf("err.tokens.unknown")
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if err := s.fresh(); err != nil {
 		return 0, err
 	}
+
 	updated, renamed := slices.Clone(s.items), 0
 	for index, current := range updated {
 		issuer := clean(current.token.Issuer)
@@ -390,9 +437,11 @@ func (s *Store) RenameFolder(from, to string) (int, error) {
 		updated[index].token.Issuer = rest
 		renamed++
 	}
+
 	if renamed == 0 {
 		return 0, i18n.Errorf("err.tokens.unknown")
 	}
+
 	return renamed, s.commit(updated)
 }
 
@@ -400,10 +449,12 @@ func (s *Store) RenameFolder(from, to string) (int, error) {
 func (s *Store) Delete(id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	index, err := s.find(id)
 	if err != nil {
 		return err
 	}
+
 	return s.commit(slices.Delete(slices.Clone(s.items), index, index+1))
 }
 
@@ -411,13 +462,16 @@ func (s *Store) Delete(id int) error {
 func (s *Store) Export() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if err := s.fresh(); err != nil {
 		return "", err
 	}
+
 	lines := []string{}
 	for _, current := range s.items {
 		lines = append(lines, current.token.URI())
 	}
+
 	return strings.Join(lines, "\n"), nil
 }
 
@@ -431,6 +485,7 @@ func (s *Store) commit(updated []item) error {
 		s.items = previous
 		return err
 	}
+
 	return nil
 }
 
@@ -439,15 +494,18 @@ func (s *Store) commit(updated []item) error {
 func (s *Store) Reseal(key string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if err := s.fresh(); err != nil {
 		return 0, err
 	}
+
 	former := s.Key
 	s.Key = key
 	if err := s.save(true); err != nil {
 		s.Key = former
 		return 0, err
 	}
+
 	return len(s.items), nil
 }
 
@@ -461,22 +519,26 @@ type PinnedItem struct {
 func (s *Store) Pinned() []PinnedItem {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	result := []PinnedItem{}
 	for _, current := range s.items {
 		if !current.token.Pinned {
 			continue
 		}
+
 		parts := []string{}
 		for _, part := range strings.Split(current.token.Issuer, "/") {
 			if part = strings.TrimSpace(part); part != "" {
 				parts = append(parts, part)
 			}
 		}
+
 		if current.token.Account != "" {
 			parts = append(parts, current.token.Account)
 		}
 		result = append(result, PinnedItem{current.id, strings.Join(parts, " / ")})
 	}
+
 	slices.SortStableFunc(result, func(a, b PinnedItem) int { return strings.Compare(strings.ToLower(a.Label), strings.ToLower(b.Label)) })
 	return result
 }
@@ -485,13 +547,16 @@ func (s *Store) Pinned() []PinnedItem {
 func (s *Store) PinnedCode(id int) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	index, err := s.find(id)
 	if err != nil {
 		return "", err
 	}
+
 	if !s.items[index].token.Pinned {
 		return "", i18n.Errorf("err.tokens.unknown")
 	}
+
 	value, _, err := s.items[index].token.Code(s.now())
 	return value, err
 }

@@ -34,6 +34,7 @@ func Normalize(language string) string {
 	if _, ok := catalog[language]; ok {
 		return language
 	}
+
 	return Default
 }
 
@@ -51,6 +52,7 @@ func Current() string {
 	if language, ok := current.Load().(string); ok {
 		return language
 	}
+
 	return Default
 }
 
@@ -69,6 +71,7 @@ func T(key string, args ...any) string {
 	if len(args) == 0 {
 		return message
 	}
+
 	return fmt.Sprintf(message, args...)
 }
 

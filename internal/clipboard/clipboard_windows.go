@@ -34,11 +34,13 @@ func globalText(data []uint16) uintptr {
 	if handle == 0 {
 		return 0
 	}
+
 	pointer, _, _ := procGlobalLock.Call(handle)
 	if pointer == 0 {
 		procGlobalFree.Call(handle)
 		return 0
 	}
+
 	procMoveMemory.Call(pointer, uintptr(unsafe.Pointer(&data[0])), size)
 	procGlobalUnlock.Call(handle)
 	return handle
@@ -51,19 +53,24 @@ func Copy(hwnd uintptr, text string) error {
 	if err != nil {
 		return err
 	}
+
 	if ok, _, err := procOpenClipboard.Call(hwnd); ok == 0 {
 		return err
 	}
+
 	defer procCloseClipboard.Call()
+
 	procEmptyClipboard.Call()
 	handle := globalText(data)
 	if handle == 0 {
 		return windows.ERROR_NOT_ENOUGH_MEMORY
 	}
+
 	if ok, _, err := procSetClipboard.Call(cfUnicodeText, handle); ok == 0 {
 		procGlobalFree.Call(handle)
 		return err
 	}
+
 	for _, name := range []string{"CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"} {
 		format, _ := windows.UTF16PtrFromString(name)
 		if id, _, _ := procRegisterFormat.Call(uintptr(unsafe.Pointer(format))); id != 0 {
@@ -75,5 +82,6 @@ func Copy(hwnd uintptr, text string) error {
 			}
 		}
 	}
+
 	return nil
 }

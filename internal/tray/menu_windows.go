@@ -16,6 +16,12 @@ var (
 	procDeleteObject    = windows.NewLazySystemDLL("gdi32.dll").NewProc("DeleteObject")
 )
 
+const (
+	imageBitmap        = 0
+	lrCreateDIBSection = 0x2000
+	miimBitmap         = 0x80
+)
+
 type iconInfo struct {
 	Icon               int32
 	XHotspot, YHotspot uint32
@@ -37,23 +43,28 @@ func (t *Tray) updateMenuIcon() {
 	if t.menuHandle == 0 || t.menuPinCount == 0 {
 		return
 	}
+
 	var image iconInfo
 	if ok, _, _ := procGetIconInfo.Call(t.menuIcon, uintptr(unsafe.Pointer(&image))); ok == 0 {
 		return
 	}
-	bitmap, _, _ := procCopyImage.Call(image.Color, 0, 0, 0, 0x2000) // IMAGE_BITMAP, LR_CREATEDIBSECTION
+
+	bitmap, _, _ := procCopyImage.Call(image.Color, imageBitmap, 0, 0, lrCreateDIBSection)
 	procDeleteObject.Call(image.Mask)
 	procDeleteObject.Call(image.Color)
 	if bitmap == 0 {
 		return
 	}
-	item := menuItemInfo{Mask: 0x80, Bitmap: bitmap} // MIIM_BITMAP
+
+	item := menuItemInfo{Mask: miimBitmap, Bitmap: bitmap}
 	item.Size = uint32(unsafe.Sizeof(item))
 	for index := 0; index < t.menuPinCount; index++ {
-		procSetMenuItemInfo.Call(t.menuHandle, uintptr(index+3), 0, uintptr(unsafe.Pointer(&item)))
+		procSetMenuItemInfo.Call(t.menuHandle, uintptr(index+firstPinCommand), 0, uintptr(unsafe.Pointer(&item)))
 	}
+
 	procDeleteObject.Call(t.menuBitmap)
 	t.menuBitmap = bitmap
+
 	var bounds windows.Rect
 	if ok, _, _ := procGetMenuItemRect.Call(0, t.menuHandle, 0, uintptr(unsafe.Pointer(&bounds))); ok != 0 {
 		point := uintptr(uint32(bounds.Left+1)) | uintptr(uint32(bounds.Top+1))<<32
