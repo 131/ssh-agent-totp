@@ -37,8 +37,21 @@ func TestNativeShortcut(t *testing.T) {
 		fail("read shortcut: %v %q", err, output)
 	}
 	parts := strings.Split(strings.TrimSpace(string(output)), "|")
-	if len(parts) != 2 || !strings.EqualFold(parts[0], target) || !strings.EqualFold(parts[1], filepath.Dir(target)) {
-		fail("shortcut mismatch: got=%q; target=%q; directory=%q", output, target, filepath.Dir(target))
+	if len(parts) != 2 {
+		fail("invalid shortcut response: %q", output)
+	}
+
+	// WScript expands DOS 8.3 aliases (RUNNER~1) to long names. Compare the
+	// actual file/directory identities, not their textual spellings.
+	for index, expected := range []string{target, filepath.Dir(target)} {
+		actualInfo, err := os.Stat(parts[index])
+		if err != nil {
+			fail("shortcut path: %v", err)
+		}
+		expectedInfo, err := os.Stat(expected)
+		if err != nil || !os.SameFile(actualInfo, expectedInfo) {
+			fail("shortcut mismatch: got=%q; expected=%q; error=%v", parts[index], expected, err)
+		}
 	}
 	if enabled, err := store.SetEnabled(false); enabled || err != nil {
 		fail("native removal: %v %v", enabled, err)
