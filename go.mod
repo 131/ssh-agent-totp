@@ -1,6 +1,6 @@
 module github.com/131/ssh-agent-totp
 
-// version: 0.1.6
+// version: 0.1.7
 
 go 1.22
 
