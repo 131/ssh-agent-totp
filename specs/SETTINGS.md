@@ -47,7 +47,7 @@ remote_channels:
 | `update.upstream` | `https://github.com/131/ssh-agent-totp` | no | GitHub repository providing `manifest.json` and the releases, `https://github.com/<owner>/<repo>`. Shown in the settings panel. |
 | `remote_channels` | | no | Cache of the upstream `manifest.json`, managed by the application. |
 
-The settings panel is the wrench at the top right of the window. It also shows
+The settings panel is the wrench after the brand/logo at the top left of the window. It also shows
 the token file, the running and latest versions, an *Export* button
 ([export](TOKENS.md#export)) and a *Check for updates* button, which fetches
 `manifest.json` again whatever the cache.

@@ -315,6 +315,19 @@ func (s *Store) Rename(id int, issuer, account string) error {
 	return s.Edit(id, issuer, account, nil)
 }
 
+// Pin changes only the tray shortcut, keeping the latest token name.
+func (s *Store) Pin(id int, pinned bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, err := s.find(id)
+	if err != nil {
+		return err
+	}
+	updated := slices.Clone(s.items)
+	updated[index].token.Pinned = pinned
+	return s.commit(updated)
+}
+
 // Edit saves the name and optional pin state atomically.
 func (s *Store) Edit(id int, issuer, account string, pinned *bool) error {
 	s.mu.Lock()

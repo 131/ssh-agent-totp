@@ -1,6 +1,8 @@
 'use strict';
 (() => {
 const $ = id => document.getElementById(id);
+// Go's sole periodic timer broadcasts the same tick to every view.
+window.fireEvent = (name, modulus, percent, now) => window.dispatchEvent(new CustomEvent(name, {detail: {now, modulus, percent}}));
 // Messages come from Go (internal/i18n/messages.json); %s are filled in order.
 const t = (key, ...args) => { let index = 0; return (window.I18N.messages[key] ?? key).replace(/%[sd]/g, () => String(args[index++])); };
 // Desktop window: no browser zoom, reload, context menu or file drop.
@@ -19,14 +21,18 @@ const call = (method, ...args) => new Promise((resolve, reject) => { const id = 
 // the layout. At most `visible` at once; the rest wait their turn.
 const toasts = {visible: 4, queue: []};
 function notice(message, error = false, action = null) { toasts.queue.push({message, error, action}); flushToasts(); }
+window.notice = notice;
 function flushToasts() {
-  const box = $('toasts');
+  const box = $('toasts'), host = document.querySelector('dialog[open]') || document.body;
+  if (box.parentElement !== host) { if (box.matches(':popover-open')) box.hidePopover(); host.append(box); }
   while (box.childElementCount < toasts.visible && toasts.queue.length) box.append(toast(toasts.queue.shift()));
   if (!box.childElementCount) { if (box.matches(':popover-open')) box.hidePopover(); return; }
   // Re-open so the stack stays above a dialog opened since.
   if (box.matches(':popover-open')) box.hidePopover();
   box.showPopover();
 }
+// A modal makes nodes outside it inert, even if their popover is on top.
+for (const dialog of document.querySelectorAll('dialog')) new MutationObserver(flushToasts).observe(dialog, {attributes: true, attributeFilter: ['open']});
 // A toast with an action stays until it is used or closed.
 function toast({message, error, action}) {
   const item = document.createElement('div'); item.className = error ? 'toast error' : 'toast';
@@ -41,7 +47,10 @@ function toast({message, error, action}) {
   item.append(text);
   if (action) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'small'; button.textContent = action.label;
-    button.addEventListener('click', () => run(button, async () => { await action.run(); remove(); }));
+    button.addEventListener('click', () => run(button, async () => {
+      button.classList.add('busy'); button.setAttribute('aria-busy', 'true');
+      try { if (action.busy) text.textContent = action.busy; await action.run(); remove(); } catch (error) { text.textContent = message; throw error; } finally { button.classList.remove('busy'); button.removeAttribute('aria-busy'); }
+    }));
     item.append(button);
   }
   item.append(close); arm();
@@ -67,6 +76,7 @@ const icons = {
   trash: '<path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.5 6.5v4.5M9.5 6.5v4.5"/>',
   plus: '<path d="M8 2.5v11M2.5 8h11"/>',
   pencil: '<path d="M11 2.5l2.5 2.5L6 12.5 2.5 13.5 3.5 10z"/><path d="M9.5 4l2.5 2.5"/>',
+  pin: '<path d="M6 2h4l-1 4 3 3H4l3-3zM8 9v5"/>',
   tag: '<path d="M2 2.5h5.5L14 9l-5 5-6.5-6.5z"/><circle cx="5.2" cy="5.7" r="1"/>',
   eye: '<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>',
   'eye-off': '<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/><path d="M2 2l12 12"/>',
@@ -102,7 +112,7 @@ document.addEventListener('mousedown', event => {
 $('minimize-window').addEventListener('click', () => call('window', 'minimize').catch(() => {}));
 $('close-window').addEventListener('click', () => call('window', 'close').catch(() => {}));
 // Tokens: the list refreshes when the first code expires, the rings in between.
-let state = {path: '', key: '', codes: []}, loading = null;
+let state = {path: '', key: '', codes: []}, loading = null, lastTick = null;
 const group = code => code.length < 6 ? code : code.slice(0, Math.ceil(code.length / 2)) + ' ' + code.slice(Math.ceil(code.length / 2));
 const label = code => code.account ? `${code.issuer} (${code.account})` : code.issuer || code.account;
 function lock(message) { $('lock-text').textContent = message; $('lock').hidden = false; $('tokens').hidden = true; }
@@ -120,7 +130,7 @@ async function refresh() {
 function ring() {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 22 22'); svg.setAttribute('class', 'ring'); svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = '<circle class="track" cx="11" cy="11" r="8"/><circle class="left" cx="11" cy="11" r="8" pathLength="100" stroke-dasharray="100 100"/>';
+  svg.innerHTML = '<circle class="track" cx="11" cy="11" r="8"/><circle class="progress" cx="11" cy="11" r="8" pathLength="100" stroke-dasharray="0 100"/>';
   return svg;
 }
 // Folders are the "/" separated parts of the issuer but the last one:
@@ -211,7 +221,9 @@ function render() {
     const value = document.createElement('div'); value.className = 'code'; value.textContent = code.error || group(code.code);
     if (code.error) value.title = code.error;
     const tools = document.createElement('div'); tools.className = 'edit-tools';
-    tools.append(tool('tag', t('rename'), () => openRename(code)), tool('trash', t('delete'), () => remove(code), 'danger'));
+    const pin = tool('pin', code.pinned ? t('unpin') : t('pin'), async () => { await call('pin', code.id, !code.pinned); await refresh(); }, code.pinned ? 'on' : '');
+    pin.setAttribute('aria-pressed', String(code.pinned));
+    tools.append(pin, tool('tag', t('rename'), () => openRename(code)), tool('trash', t('delete'), () => remove(code), 'danger'));
     const side = document.createElement('div'); side.style.display = 'flex'; side.style.alignItems = 'center';
     if (!code.error) side.append(ring());
     side.append(tools);
@@ -231,8 +243,7 @@ async function copyCode(code, card) {
   card.classList.add('copied'); setTimeout(() => card.classList.remove('copied'), 1200);
   notice(t('copied.code', label(current)));
 }
-function tick() {
-  const now = Date.now();
+function tick(now = lastTick?.now ?? Math.floor(Date.now() / 1000) * 1000) {
   let expired = false;
   for (const code of state.codes) {
     if (code.error) continue;
@@ -241,12 +252,13 @@ function tick() {
     const card = $('list').querySelector(`.card[data-id="${code.id}"]`);
     if (!card) continue;
     card.classList.toggle('ending', left <= 5);
-    card.querySelector('.ring .left')?.setAttribute('stroke-dasharray', `${(left / code.period) * 100} 100`);
+    const progress = Math.min(1, Math.max(0, 1 - left / code.period));
+    card.querySelector('.ring .progress')?.setAttribute('stroke-dasharray', `${progress * 100} 100`);
     card.title = t('expires', Math.ceil(left));
   }
   if (expired) refresh();
 }
-setInterval(tick, 250);
+window.addEventListener('tick', event => { lastTick = event.detail; tick(lastTick.now); });
 window.addEventListener('focus', refresh);
 async function remove(code) { if (!await confirmed(t('delete.confirm', label(code)))) return; await call('delete', code.id); await refresh(); notice(t('deleted', label(code))); }
 // The rename dialog serves a token (issuer, account) or a folder (its path,
@@ -255,8 +267,6 @@ let renaming = null;
 function openRenameDialog(target, title, issuerLabel, help) {
   renaming = target; $('rename-title').textContent = title; $('rename-issuer-label').textContent = issuerLabel; $('rename-help').textContent = help;
   $('rename-account-label').hidden = Boolean(target.folder);
-  $('rename-pinned-label').hidden = Boolean(target.folder);
-  $('rename-pinned').checked = Boolean(target.pinned);
   $('rename').showModal(); $('rename-issuer').focus(); $('rename-issuer').select();
 }
 function openRename(code) { $('rename-issuer').value = code.issuer; $('rename-account').value = code.account; openRenameDialog(code, t('rename'), t('rename.issuer'), t('rename.help')); }
@@ -269,7 +279,7 @@ $('rename-form').addEventListener('submit', event => { event.preventDefault(); r
     $('rename').close(); await refresh(); notice(t('folder.renamed', moved, to.join('/') || '/'));
     return;
   }
-  await call('rename', renaming.id, $('rename-issuer').value, $('rename-account').value, $('rename-pinned').checked); $('rename').close(); await refresh(); notice(t('renamed'));
+  await call('rename', renaming.id, $('rename-issuer').value, $('rename-account').value); $('rename').close(); await refresh(); notice(t('renamed'));
 }); });
 for (const id of ['close-rename', 'cancel-rename']) $(id).addEventListener('click', () => $('rename').close());
 // Add dialog (+): one entry, the batch import box, the export (masked until
@@ -353,7 +363,10 @@ $('settings-button').append(icon('wrench'));
 $('settings-button').addEventListener('click', () => { $('settings').showModal(); loadKeys(); });
 $('close-settings').addEventListener('click', () => $('settings').close());
 // A click on the grayed backdrop closes the settings, like Escape.
-$('settings').addEventListener('click', event => { if (event.target === $('settings')) $('settings').close(); });
+$('settings').addEventListener('click', event => {
+  const bounds = $('settings').getBoundingClientRect();
+  if (event.target === $('settings') && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) $('settings').close();
+});
 let offered = '';
 function updates(release) {
   $('update-enable').checked = release.enabled;
@@ -370,8 +383,7 @@ function updates(release) {
   if (release.latest) $('open-release').textContent = t('update.download', release.latest);
   if (!release.available || offered === release.latest) return;
   offered = release.latest;
-  notice(t('update.available', release.latest, release.current), false, {label: t('update.install'), run: async () => {
-    notice(t('update.downloading', release.latest));
+  notice(t('update.available', release.latest, release.current), false, {label: t('update.install'), busy: t('update.downloading', release.latest), run: async () => {
     await call('update_install', release.latest);
   }});
 }

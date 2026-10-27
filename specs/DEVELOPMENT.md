@@ -46,7 +46,9 @@ the same keys and that every key used exists.
 
 ## Icon and manifest
 
-The icon (`winres/icon.py`: a stopwatch whose crown is a padlock shackle) and
+The icon (`winres/icon.py`: a stopwatch whose crown is a padlock shackle), its
+30 small tray frames (`winres/frames/`), white/gray/blue menu ring variants, the
+copied checkmark, and
 the Windows manifest are linked through `rsrc_windows_amd64.syso`. After
 changing them, regenerate it:
 
@@ -54,3 +56,32 @@ changing them, regenerate it:
 (cd winres && python3 icon.py)
 go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
 ```
+
+The tray advances the existing dial once per second on a Win32 window timer.
+`spin` plus its timer setup/dispatch is under 25 lines: shared icon resources,
+no runtime drawing or animation framework. The 30-second cycle is a visual
+clock, not an individual token's period (tokens may have different periods).
+
+Menu items use the standard Windows bitmap column, not owner-drawn rows.
+Their ring resources share the tray's animation phase; one
+bitmap serves all pinned entries, and replaced bitmaps are released.
+
+## Shared clock and GUI dispatch
+
+The composition root creates one `internal/clock.Clock`. Native icon/menu
+subscribers and the GUI bridge subscribe once; a single 1 Hz Win32 timer
+emits the tick. The GUI listens to the global `tick` event rather than
+installing an interval of its own. Timing and direction are defined in
+[TRAY.md](TRAY.md#one-application-tick).
+
+Agent/file work stays off the GUI thread. Replies use a window-targeted
+dispatch message, so native popup and move/resize message loops still
+execute them. After a modal loop, WebView2's own binding completion queue is
+woken as well. A thread-only wakeup consumed by the native menu must not
+leave the list's refresh promise pending forever.
+
+## Header controls
+
+The brand/logo then the settings wrench form the left group. Add and Edit
+are on the right, before the window controls. A token's pin tool keeps the
+same icon in both states; only its pressed style changes.

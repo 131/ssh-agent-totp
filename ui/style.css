@@ -129,8 +129,8 @@ dialog p{margin:4px 0}
 .ring{width:22px;height:22px;transform:rotate(-90deg)}
 .ring circle{fill:none;stroke-width:3}
 .ring .track{stroke:#e3eae1}
-.ring .left{stroke:#5f9672;stroke-linecap:butt}
-.card.ending .ring .left{stroke:#c4553a}
+.ring .progress{stroke:#5f9672;stroke-linecap:butt}
+.card.ending .ring .progress{stroke:#c4553a}
 .card .edit-tools{display:none;align-items:center;gap:1px}
 body.editing .card{cursor:default}
 body.editing .card .edit-tools{display:flex}
@@ -169,4 +169,7 @@ dialog .section-head{margin-bottom:4px}
 #settings .key-select{min-width:0;max-width:190px}
 #settings dd.path{direction:rtl;text-align:right}
 
-#rename-pinned{width:auto;height:auto;display:inline;margin:0 6px 0 0}
+/* One persistent update action; no second overlay hides its button. */
+button.busy::before{content:"";display:inline-block;width:12px;height:12px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:download-spin .7s linear infinite}
+@keyframes download-spin{to{transform:rotate(360deg)}}
+#settings-button{flex:none;margin-right:4px}

@@ -24,8 +24,8 @@ Your SSH agent must be running with at least one key loaded.
 
 ## What you can do
 
-- **Codes**: click a card to copy its current code. The ring shows the time
-  left; it turns red for the last seconds. Type `/` or Ctrl+F to search.
+- **Codes**: click a card to copy its current code. The ring shows elapsed
+  progress, filling clockwise from twelve o’clock and resetting every period. It turns red for the last seconds. Type `/` or Ctrl+F to search.
 - **Add** (`+`), three tabs:
   - *Add entry*: issuer, account, base32 secret, and algorithm, digits and
     period when the service asks for them;
@@ -41,14 +41,17 @@ Your SSH agent must be running with at least one key loaded.
   back.
 - **Edit mode** (pencil): rename and delete tokens, rename folders (every
   token inside follows). Out of edit mode nothing can be deleted by mistake,
-  and a deletion still asks first. Pin individual tokens from their edit dialog
-  to add them to the flat, alphabetical tray menu; clicking one copies its
-  current code. Pins are preserved by export/import.
+  and a deletion still asks first. Use the pin/unpin icon next to each token
+  to choose the flat, alphabetical tray shortcuts. The menu shows names only;
+  clicking one copies its current code. Pins survive export/import.
 
 Copied codes stay out of the Windows clipboard history and cloud clipboard.
 
 The app lives in the notification area: closing the window (or Escape) keeps
-it there, click the icon to bring it back, right-click > Quit to exit.
+it there. A single click (or right-click) opens the tray menu; double-click
+brings back the full window. The existing dial animates at one frame per
+second. A successful copy flashes a checkmark and posts a silent notification.
+Use Quit in the tray menu to exit. See the [tray compromise](specs/TRAY.md).
 
 ## Your tokens
 
@@ -63,7 +66,7 @@ other authenticator, no app needed. See [tokens](specs/TOKENS.md).
 ssh-agent-totp updates itself: when a new version is out, a notification
 offers to install it. Only versions signed by the same publisher are accepted.
 Choose the release channel (`production` by default) and check for updates
-from the settings (wrench, top right). Only the update check talks to the
+from the settings (wrench, top left). Only the update check talks to the
 network.
 
 ## Settings
@@ -80,7 +83,7 @@ secrets are gone.
 
 ## Specifications
 
-[Tokens](specs/TOKENS.md), [settings](specs/SETTINGS.md),
+[Tokens](specs/TOKENS.md), [tray](specs/TRAY.md), [settings](specs/SETTINGS.md),
 [releases and auto-update](specs/RELEASES.md),
 [development](specs/DEVELOPMENT.md), [guideline](specs/dev_guideline.md)
 (boring is good).

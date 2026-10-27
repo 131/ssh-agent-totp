@@ -2,12 +2,204 @@
   "RT_GROUP_ICON": {
     "#1": {
       "0000": "icon.ico"
+    },
+    "#2": {
+      "0000": "frames/00.ico"
+    },
+    "#3": {
+      "0000": "frames/01.ico"
+    },
+    "#4": {
+      "0000": "frames/02.ico"
+    },
+    "#5": {
+      "0000": "frames/03.ico"
+    },
+    "#6": {
+      "0000": "frames/04.ico"
+    },
+    "#7": {
+      "0000": "frames/05.ico"
+    },
+    "#8": {
+      "0000": "frames/06.ico"
+    },
+    "#9": {
+      "0000": "frames/07.ico"
+    },
+    "#10": {
+      "0000": "frames/08.ico"
+    },
+    "#11": {
+      "0000": "frames/09.ico"
+    },
+    "#12": {
+      "0000": "frames/10.ico"
+    },
+    "#13": {
+      "0000": "frames/11.ico"
+    },
+    "#14": {
+      "0000": "frames/12.ico"
+    },
+    "#15": {
+      "0000": "frames/13.ico"
+    },
+    "#16": {
+      "0000": "frames/14.ico"
+    },
+    "#17": {
+      "0000": "frames/15.ico"
+    },
+    "#18": {
+      "0000": "frames/16.ico"
+    },
+    "#19": {
+      "0000": "frames/17.ico"
+    },
+    "#20": {
+      "0000": "frames/18.ico"
+    },
+    "#21": {
+      "0000": "frames/19.ico"
+    },
+    "#22": {
+      "0000": "frames/20.ico"
+    },
+    "#23": {
+      "0000": "frames/21.ico"
+    },
+    "#24": {
+      "0000": "frames/22.ico"
+    },
+    "#25": {
+      "0000": "frames/23.ico"
+    },
+    "#26": {
+      "0000": "frames/24.ico"
+    },
+    "#27": {
+      "0000": "frames/25.ico"
+    },
+    "#28": {
+      "0000": "frames/26.ico"
+    },
+    "#29": {
+      "0000": "frames/27.ico"
+    },
+    "#30": {
+      "0000": "frames/28.ico"
+    },
+    "#31": {
+      "0000": "frames/29.ico"
+    },
+    "#32": {
+      "0000": "frames/copied.ico"
+    },
+    "#33": {
+      "0000": "frames/menu-33.ico"
+    },
+    "#34": {
+      "0000": "frames/menu-34.ico"
+    },
+    "#35": {
+      "0000": "frames/menu-35.ico"
+    },
+    "#36": {
+      "0000": "frames/menu-36.ico"
+    },
+    "#37": {
+      "0000": "frames/menu-37.ico"
+    },
+    "#38": {
+      "0000": "frames/menu-38.ico"
+    },
+    "#39": {
+      "0000": "frames/menu-39.ico"
+    },
+    "#40": {
+      "0000": "frames/menu-40.ico"
+    },
+    "#41": {
+      "0000": "frames/menu-41.ico"
+    },
+    "#42": {
+      "0000": "frames/menu-42.ico"
+    },
+    "#43": {
+      "0000": "frames/menu-43.ico"
+    },
+    "#44": {
+      "0000": "frames/menu-44.ico"
+    },
+    "#45": {
+      "0000": "frames/menu-45.ico"
+    },
+    "#46": {
+      "0000": "frames/menu-46.ico"
+    },
+    "#47": {
+      "0000": "frames/menu-47.ico"
+    },
+    "#48": {
+      "0000": "frames/menu-48.ico"
+    },
+    "#49": {
+      "0000": "frames/menu-49.ico"
+    },
+    "#50": {
+      "0000": "frames/menu-50.ico"
+    },
+    "#51": {
+      "0000": "frames/menu-51.ico"
+    },
+    "#52": {
+      "0000": "frames/menu-52.ico"
+    },
+    "#53": {
+      "0000": "frames/menu-53.ico"
+    },
+    "#54": {
+      "0000": "frames/menu-54.ico"
+    },
+    "#55": {
+      "0000": "frames/menu-55.ico"
+    },
+    "#56": {
+      "0000": "frames/menu-56.ico"
+    },
+    "#57": {
+      "0000": "frames/menu-57.ico"
+    },
+    "#58": {
+      "0000": "frames/menu-58.ico"
+    },
+    "#59": {
+      "0000": "frames/menu-59.ico"
+    },
+    "#60": {
+      "0000": "frames/menu-60.ico"
+    },
+    "#61": {
+      "0000": "frames/menu-61.ico"
+    },
+    "#62": {
+      "0000": "frames/menu-62.ico"
+    },
+    "#63": {
+      "0000": "frames/menu-63.ico"
+    },
+    "#64": {
+      "0000": "frames/menu-64.ico"
     }
   },
   "RT_MANIFEST": {
     "#1": {
       "0409": {
-        "identity": {"name": "ssh-agent-totp", "version": ""},
+        "identity": {
+          "name": "ssh-agent-totp",
+          "version": ""
+        },
         "description": "ssh-agent-totp, TOTP codes sealed by your SSH agent",
         "minimum-os": "win10",
         "execution-level": "as invoker",

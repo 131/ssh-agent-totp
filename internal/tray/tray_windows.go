@@ -1,5 +1,5 @@
 // Package tray keeps the window in the notification area: minimizing or
-// closing hides it, the icon restores it, and its menu is the only way to quit.
+// closing hides it, a single click opens shortcuts, and a double click restores it.
 package tray
 
 import (
@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/131/ssh-agent-totp/internal/clock"
 	"github.com/131/ssh-agent-totp/internal/i18n"
 	"github.com/131/ssh-agent-totp/internal/tokens"
 )
@@ -34,6 +35,9 @@ var (
 	procGetDpiForSystem = user32.NewProc("GetDpiForSystem")
 	procNotifyIcon      = shell32.NewProc("Shell_NotifyIconW")
 	procFindWindow      = user32.NewProc("FindWindowW")
+	procSetTimer        = user32.NewProc("SetTimer")
+	procKillTimer       = user32.NewProc("KillTimer")
+	procDoubleClickTime = user32.NewProc("GetDoubleClickTime")
 	procCreateMutex     = kernel32.NewProc("CreateMutexW")
 )
 
@@ -43,18 +47,23 @@ const (
 	wmSize          = 0x0005
 	wmClose         = 0x0010
 	wmCommand       = 0x0111
+	wmTimer         = 0x0113
+	wmExitSizeMove  = 0x0232
 	wmLButtonUp     = 0x0202
 	wmLButtonDblClk = 0x0203
 	wmRButtonUp     = 0x0205
 	wmTray          = 0x8000 + 1 // WM_APP + 1
+	wmDispatch      = 0x8000 + 2
 	sizeMinimized   = 1
 	swHide          = 0
 	swRestore       = 9
 	nimAdd          = 0
+	nimModify       = 1
 	nimDelete       = 2
 	nifMessage      = 0x1
 	nifIcon         = 0x2
 	nifTip          = 0x4
+	nifInfo         = 0x10
 	imageIcon       = 1
 	smCxSmIcon      = 49
 	smCySmIcon      = 50
@@ -88,6 +97,16 @@ type notifyIconData struct {
 type Tray struct {
 	Pinned         func() []tokens.PinnedItem
 	CopyPinned     func(int)
+	AfterModal     func()
+	dispatch       uiDispatch
+	clock          *clock.Clock
+	instance       windows.Handle
+	flashUntil     time.Time
+	doubleClick    bool
+	menuIcon       uintptr
+	menuHandle     uintptr
+	menuBitmap     uintptr
+	menuPinCount   int
 	hwnd           uintptr
 	original       uintptr
 	data           notifyIconData
@@ -149,13 +168,15 @@ func Scale(value uint) uint {
 	return value * uint(dpi) / 96
 }
 
-func Install(hwnd uintptr) *Tray {
-	t := &Tray{hwnd: hwnd}
+func Install(hwnd uintptr, ticks *clock.Clock) *Tray {
+	t := &Tray{hwnd: hwnd, clock: ticks}
 	var instance windows.Handle
 	windows.GetModuleHandleEx(0, nil, &instance)
+	t.instance = instance
 	cx, _, _ := procGetSystemMetric.Call(smCxSmIcon)
 	cy, _, _ := procGetSystemMetric.Call(smCySmIcon)
-	icon, _, _ := procLoadImage.Call(uintptr(instance), IconID, imageIcon, cx, cy, 0)
+	icon, _, _ := procLoadImage.Call(uintptr(instance), IconID, imageIcon, cx, cy, 0x8000)
+	t.menuIcon, _, _ = procLoadImage.Call(uintptr(instance), IconID+32, imageIcon, cx, cy, 0x8000)
 	t.data = notifyIconData{Wnd: hwnd, ID: 1, Flags: nifMessage | nifIcon | nifTip, CallbackMessage: wmTray, Icon: icon}
 	t.data.CbSize = uint32(unsafe.Sizeof(t.data))
 	copy(t.data.Tip[:len(t.data.Tip)-1], windows.StringToUTF16(WindowTitle))
@@ -163,10 +184,16 @@ func Install(hwnd uintptr) *Tray {
 	t.show = registeredMessage("ssh-agent-totp-show")
 	t.add()
 	t.original, _, _ = procSetWindowLong.Call(hwnd, gwlpWndProc, syscall.NewCallback(t.wndproc))
+	ticks.Subscribe(t.spin)
+	ticks.Subscribe(func(clock.Tick) { t.updateMenuIcon() })
+	procSetTimer.Call(hwnd, 1, 1000, 0)
 	return t
 }
 
-func (t *Tray) add() { procNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&t.data))) }
+func (t *Tray) add() {
+	t.data.Flags = nifMessage | nifIcon | nifTip
+	procNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&t.data)))
+}
 
 // Show restores the window to report a tray action error.
 func (t *Tray) Show() { t.restore() }
@@ -183,11 +210,20 @@ func appendMenu(menu, flags, id uintptr, label string) {
 
 func (t *Tray) menu() {
 	menu, _, _ := procCreatePopupMenu.Call()
-	defer procDestroyMenu.Call(menu)
+	t.menuHandle = menu
+	defer func() {
+		procDestroyMenu.Call(menu)
+		procDeleteObject.Call(t.menuBitmap)
+		t.menuHandle, t.menuBitmap, t.menuPinCount = 0, 0, 0
+		if t.AfterModal != nil {
+			t.AfterModal()
+		}
+	}()
 	pins := []tokens.PinnedItem{}
 	if t.Pinned != nil {
 		pins = t.Pinned()
 	}
+	t.menuPinCount = len(pins)
 	for index, pin := range pins {
 		appendMenu(menu, mfString, uintptr(index+3), strings.ReplaceAll(pin.Label, "&", "&&"))
 	}
@@ -197,6 +233,7 @@ func (t *Tray) menu() {
 	appendMenu(menu, mfString, menuOpen, i18n.T("tray.open"))
 	procAppendMenu.Call(menu, mfSeparator, 0, 0)
 	appendMenu(menu, mfString, menuQuit, i18n.T("tray.quit"))
+	t.updateMenuIcon()
 	var point struct{ X, Y int32 }
 	procGetCursorPos.Call(uintptr(unsafe.Pointer(&point)))
 	// Required so the menu closes when clicking elsewhere.
@@ -218,13 +255,37 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	switch {
 	case msg == wmNcCalcSize && wparam != 0 && t.borderless:
 		return 0 // no title bar nor border: the UI draws them
+	case msg == wmDispatch:
+		t.runDispatched()
+		return 0
 	case msg == wmTray:
 		switch lparam & 0xffff {
-		case wmLButtonUp, wmLButtonDblClk:
+		case wmLButtonUp:
+			if t.doubleClick {
+				t.doubleClick = false
+				break
+			}
+			delay, _, _ := procDoubleClickTime.Call()
+			procSetTimer.Call(hwnd, 2, delay, 0)
+		case wmLButtonDblClk:
+			procKillTimer.Call(hwnd, 2)
+			t.doubleClick = true
 			t.restore()
 		case wmRButtonUp:
+			procKillTimer.Call(hwnd, 2)
 			t.menu()
 		}
+		return 0
+	case msg == wmExitSizeMove:
+		if t.AfterModal != nil {
+			t.AfterModal()
+		}
+	case msg == wmTimer && wparam == 1:
+		t.clock.Fire(time.Now())
+		return 0
+	case msg == wmTimer && wparam == 2:
+		procKillTimer.Call(hwnd, 2)
+		t.menu()
 		return 0
 	case msg == t.taskbarCreated && msg != 0:
 		t.add()
@@ -235,6 +296,8 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		procShowWindow.Call(hwnd, swHide)
 		return 0
 	case msg == wmDestroy:
+		procKillTimer.Call(hwnd, 1)
+		procKillTimer.Call(hwnd, 2)
 		procNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&t.data)))
 	}
 	result, _, _ := procCallWindowProc.Call(t.original, hwnd, msg, wparam, lparam)
@@ -242,4 +305,27 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		procShowWindow.Call(hwnd, swHide)
 	}
 	return result
+}
+
+// spin reuses shared icon resources: one sector per second, no drawing loop.
+func (t *Tray) spin(tick clock.Tick) {
+	id := uintptr(2 + tick.Modulus)
+	if tick.Now < t.flashUntil.UnixMilli() && tick.Modulus%2 == 0 {
+		id = 32
+	}
+	cx, _, _ := procGetSystemMetric.Call(smCxSmIcon)
+	cy, _, _ := procGetSystemMetric.Call(smCySmIcon)
+	t.data.Icon, _, _ = procLoadImage.Call(uintptr(t.instance), id, imageIcon, cx, cy, 0x8000)
+	t.menuIcon, _, _ = procLoadImage.Call(uintptr(t.instance), id+32, imageIcon, cx, cy, 0x8000)
+	t.data.Flags = nifIcon
+	procNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&t.data)))
+}
+
+// Copied gives feedback without opening the window or exposing the code.
+func (t *Tray) Copied() {
+	t.flashUntil = time.Now().Add(3 * time.Second)
+	t.data.Flags, t.data.InfoFlags = nifInfo, 1|0x10 // information, no sound
+	copy(t.data.Info[:], windows.StringToUTF16(i18n.T("tray.copied")))
+	copy(t.data.InfoTitle[:], windows.StringToUTF16(WindowTitle))
+	procNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&t.data)))
 }

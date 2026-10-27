@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/131/ssh-agent-totp/internal/clipboard"
+	"github.com/131/ssh-agent-totp/internal/clock"
 	"github.com/131/ssh-agent-totp/internal/i18n"
 	"github.com/131/ssh-agent-totp/internal/tray"
 	"github.com/131/ssh-agent-totp/internal/update"
@@ -50,9 +51,18 @@ func main() {
 	defer w.Destroy()
 	w.SetSize(int(tray.Scale(280)), int(tray.Scale(300)), webview.HintMin)
 	hwnd := uintptr(w.Window())
-	icon := tray.Install(hwnd)
+	var ticks clock.Clock
+	icon := tray.Install(hwnd, &ticks)
 	icon.Borderless()
-	app.Copy = func(text string) error { return clipboard.Copy(hwnd, text) }
+	// Wake WebView2's own binding completions after a native modal loop.
+	icon.AfterModal = func() { w.Dispatch(func() {}) }
+	app.Copy = func(text string) error {
+		if err := clipboard.Copy(hwnd, text); err != nil {
+			return err
+		}
+		icon.Dispatch(icon.Copied)
+		return nil
+	}
 	icon.Pinned = app.Tokens.Pinned
 	icon.CopyPinned = func(id int) {
 		go func() {
@@ -62,13 +72,13 @@ func main() {
 			}
 			if err != nil {
 				message, _ := json.Marshal(err.Error())
-				w.Dispatch(func() { icon.Show(); w.Eval("notice(" + string(message) + ", true)") })
+				icon.Dispatch(func() { icon.Show(); w.Eval("window.notice(" + string(message) + ", true)") })
 			}
 		}()
 	}
 	app.Window = func(action string) error {
 		done := make(chan bool)
-		w.Dispatch(func() { done <- icon.Frame(action) })
+		icon.Dispatch(func() { done <- icon.Frame(action) })
 		if !<-done {
 			return i18n.Errorf("err.window")
 		}
@@ -80,10 +90,11 @@ func main() {
 			return err
 		}
 		command.Process.Release()
-		w.Dispatch(icon.Quit)
+		icon.Dispatch(icon.Quit)
 		return nil
 	}
-	// Agent and file calls run outside the UI thread; results come back through Dispatch.
+	// Agent/file calls run outside the UI thread; HWND messages return their results
+	// even while a native popup or move/resize loop pumps window messages.
 	w.Bind("totp_call", func(id int, method string, args []json.RawMessage) {
 		go func() {
 			result, err := app.Handle(method, args)
@@ -92,10 +103,15 @@ func main() {
 				message = err.Error()
 			}
 			payload, _ := json.Marshal(map[string]any{"id": id, "error": message, "result": result})
-			w.Dispatch(func() { w.Eval("window.totpDone(" + string(payload) + ")") })
+			icon.Dispatch(func() { w.Eval("window.totpDone(" + string(payload) + ")") })
 		}()
 	})
-	app.Reload = func() { w.Dispatch(func() { w.SetHtml(ui.Page(i18n.Current())) }) }
+	// The GUI subscribes to the same 1 Hz tick as the native icons.
+	ticks.Subscribe(func(tick clock.Tick) {
+		payload, _ := json.Marshal([]any{tick.Modulus, tick.Percent, tick.Now})
+		w.Eval("window.fireEvent?.('tick', ..." + string(payload) + ")")
+	})
+	app.Reload = func() { icon.Dispatch(func() { w.SetHtml(ui.Page(i18n.Current())) }) }
 	w.SetHtml(ui.Page(i18n.Current()))
 	w.Run()
 }

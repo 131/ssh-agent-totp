@@ -72,3 +72,10 @@ removed at the next start. The executable's folder must be writable by the user.
 
 `SSH_AGENT_TOTP_VERIFY_SIGNED=<signed exe> go test ./internal/update` runs the
 Authenticode check against a real signed binary on Windows.
+
+## Installation feedback
+
+The update action stays disabled, with a download spinner, until download,
+checksum/signature verification and restart finish. Failures leave the same
+action available for retry. Toasts are hosted inside the currently open modal
+dialog so their first click is actionable, not intercepted by its backdrop.

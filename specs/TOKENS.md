@@ -161,10 +161,17 @@ longer needed, except to open older `.bak` copies.
 
 ## Tray pins
 
-The token edit dialog can pin a token to the notification-area menu. Pins are
+The pin/unpin icon beside each token in edit mode selects notification-area
+shortcuts without opening the rename dialog. Pins are
 stored inside the sealed file as the optional `pinned=true` otpauth query
 parameter (also preserved by export/import); absent means unpinned.
-The tray lists only pinned tokens, with full paths such as `a / b / c`,
-including the account when present, sorted alphabetically without submenus.
-Clicking computes and copies the current TOTP through the same clipboard
-function as the main window. Pinning does not change the main list order.
+Pinning does not change the main list order. Tray behavior and the names-only
+menu compromise are defined in [TRAY.md](TRAY.md).
+
+## Live codes and progress
+
+Codes and validity ends are recomputed at expiry. The list refreshes through
+multiple cycles without user interaction, including when a native menu is
+open. Progress grows clockwise from twelve o'clock and resets with each new
+validity period; the shared visual convention is defined in
+[TRAY.md](TRAY.md#shared-motion-and-refresh-contract).

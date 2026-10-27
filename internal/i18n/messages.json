@@ -126,7 +126,9 @@
     "version": "Version",
     "window.close": "Fermer (reste dans la zone de notification)",
     "window.minimize": "Réduire",
-    "rename.pinned": "Épingler dans le menu de la zone de notification"
+    "pin": "Épingler dans le tray",
+    "unpin": "Retirer du tray",
+    "tray.copied": "Code TOTP copié dans le presse-papiers"
   },
   "en-us": {
     "add": "Add, import, export",
@@ -255,6 +257,8 @@
     "version": "Version",
     "window.close": "Close (stays in the notification area)",
     "window.minimize": "Minimize",
-    "rename.pinned": "Pin to the tray menu"
+    "pin": "Pin to tray",
+    "unpin": "Unpin from tray",
+    "tray.copied": "TOTP code copied to clipboard"
   }
 }

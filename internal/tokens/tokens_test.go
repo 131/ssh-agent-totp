@@ -360,3 +360,69 @@ func TestPinnedShortcuts(t *testing.T) {
 		t.Fatal("unpin not persisted")
 	}
 }
+
+func TestPinWithoutRename(t *testing.T) {
+	s, fail := store(t, "")
+	if err := s.Add(totp.Token{Issuer: "Original/path", Account: "account", Secret: "JBSWY3DPEHPK3PXP"}); err != nil {
+		t.Fatal(err)
+	}
+	codes, _ := s.Codes()
+	id := codes[0].ID
+	if err := s.Pin(id, true); err != nil {
+		t.Fatal(err)
+	}
+	codes, _ = s.Codes()
+	if !codes[0].Pinned || codes[0].Issuer != "Original/path" || codes[0].Account != "account" {
+		t.Fatalf("pin changed the name: %+v", codes[0])
+	}
+	*fail = true
+	if err := s.Pin(id, false); err == nil {
+		t.Fatal("failed save accepted")
+	}
+	if len(s.Pinned()) != 1 {
+		t.Fatal("failed save removed the pin")
+	}
+	*fail = false
+	if err := s.Rename(id, "Renamed", "new account"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Load(); err != nil {
+		t.Fatal(err)
+	}
+	codes, _ = s.Codes()
+	if !codes[0].Pinned || codes[0].Issuer != "Renamed" {
+		t.Fatal("rename/reload lost pin")
+	}
+	if err := s.Pin(codes[0].ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Pinned()) != 0 {
+		t.Fatal("unpin not persisted")
+	}
+	if err := s.Pin(-1, true); err == nil {
+		t.Fatal("unknown token accepted")
+	}
+}
+
+func TestCodesKeepAdvancing(t *testing.T) {
+	s, _ := store(t, "")
+	token := totp.Token{Issuer: "Clock", Secret: "JBSWY3DPEHPK3PXP", Period: 30}
+	if err := s.Add(token); err != nil {
+		t.Fatal(err)
+	}
+	for _, second := range []int64{0, 29, 30, 59, 60, 89, 90, 120, 150} {
+		now := time.Unix(second, 0)
+		s.Now = func() time.Time { return now }
+		codes, err := s.Codes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, end, err := token.Code(now)
+		if err != nil || len(codes) != 1 || codes[0].Code != value || codes[0].Expires != end.UnixMilli() {
+			t.Fatalf("stale code at %d: %+v %v", second, codes, err)
+		}
+	}
+}
