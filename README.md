@@ -41,7 +41,9 @@ Your SSH agent must be running with at least one key loaded.
   back.
 - **Edit mode** (pencil): rename and delete tokens, rename folders (every
   token inside follows). Out of edit mode nothing can be deleted by mistake,
-  and a deletion still asks first.
+  and a deletion still asks first. Pin individual tokens from their edit dialog
+  to add them to the flat, alphabetical tray menu; clicking one copies its
+  current code. Pins are preserved by export/import.
 
 Copied codes stay out of the Windows clipboard history and cloud clipboard.
 
