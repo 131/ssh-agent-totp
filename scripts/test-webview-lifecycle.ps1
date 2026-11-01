@@ -64,6 +64,7 @@ New-Item -ItemType Directory -Path $settings -Force | Out-Null
 Set-Content -Path (Join-Path $settings 'settings.yml') -Encoding UTF8 -Value "update:`n  enable: false"
 $stderr = Join-Path $testData 'application.stderr'
 $process = Start-Process $Executable -PassThru -RedirectStandardError $stderr
+$null = $process.Handle
 $hostWindow = [IntPtr]::Zero
 try {
  Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray') -ne [IntPtr]::Zero } 'No tray host'
@@ -90,6 +91,7 @@ try {
  }
  # Reopening through a second launch must work while only the tray exists.
  $second = Start-Process $Executable -PassThru
+ $null = $second.Handle
  if (-not $second.WaitForExit(10000)) { throw 'Second instance did not exit' }
  if ($second.ExitCode -ne 0) { throw 'Second instance failed' }
  Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'Second launch did not recreate GUI'
@@ -112,9 +114,12 @@ try {
  Post $hostWindow 0x10
  if (-not $process.WaitForExit(10000)) { throw 'Quit without GUI did not exit' }
  'PASS: Quit without GUI'
+ # Keep a process handle before rapid exit: PowerShell can otherwise expose
+ # a null ExitCode after WaitForExit on a process whose handle was not cached.
  # Quit queued behind Open must still terminate during WebView initialization.
  $stderr = Join-Path $testData 'initialization.stderr'
  $process = Start-Process $Executable -PassThru -RedirectStandardError $stderr
+$null = $process.Handle
  $hostWindow = [IntPtr]::Zero
  Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray') -ne [IntPtr]::Zero } 'No host for initialization-quit check'
  if ($process.HasExited) { throw 'App exited before initialization-quit check' }
