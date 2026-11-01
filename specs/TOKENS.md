@@ -2,105 +2,79 @@
 
 ## The file
 
-Every token lives in one file, next to the settings:
+`%APPDATA%\ssh-agent-totp\tokens.crypt` is beside settings (relocatable through
+[`tokens.path`](SETTINGS.md#keys)). [ssh-agent-crypt](https://github.com/131/ssh-agent-crypt)
+seals the whole file with an agent key as one armored
+`ssh-agent-crypt:v3:SHA256:<key fingerprint>.…` line. Names and pins are encrypted
+too; backup/sync the file, but keep the SSH key. There is no master password
+or separate file signature.
 
-```
-%APPDATA%\ssh-agent-totp\tokens.crypt
-%APPDATA%\ssh-agent-totp\settings.yml
-```
+Clear store, Export and Import use the same standard format: one
+[otpauth://totp/](https://github.com/google/google-authenticator/wiki/Key-Uri-Format)
+URI per token, with optional blank lines and `#` comments:
 
-`tokens.crypt` is a text file sealed as a whole by a key of your SSH agent
-with [ssh-agent-crypt](https://github.com/131/ssh-agent-crypt): one armored
-line, `ssh-agent-crypt:v3:SHA256:<key fingerprint>.…`. Nothing is readable
-without that key, names included, so you may back the file up or sync it like
-any other (`tokens.path` in the [settings](SETTINGS.md) moves it). There is no
-other protection: no master password, no signature of the file.
-
-Unsealed, it is one standard
-[`otpauth://totp/`](https://github.com/google/google-authenticator/wiki/Key-Uri-Format)
-link per token, nothing else. The file, the *Export* tab and the *Batch
-import* box speak the same format:
-
-```
-# ssh-agent-totp tokens: https://github.com/131/ssh-agent-totp/blob/master/specs/TOKENS.md
-otpauth://totp/Azure/fleurent%28admin%29:?issuer=Azure%2Ffleurent%28admin%29&secret=KRSXG5CTMVRXEZLU
-otpauth://totp/Azure/fleurent%28perso%29:?issuer=Azure%2Ffleurent%28perso%29&secret=GEZDGNBVGY3TQOJQ
-otpauth://totp/github%20131:?digits=8&issuer=github+131&secret=MFRGGZDFMZTWQ2LK
+```text
 otpauth://totp/GitHub:fake-user?issuer=GitHub&secret=JBSWY3DPEHPK3PXP
 ```
 
 ## Link parameters
 
-| Part | Default | |
-|------|---------|-|
-| label | | `issuer:account`, URL-encoded. The account is shown next to the name and is optional. |
-| `issuer` | | Service name, shown in bold. Any text; `/` makes [folders](#names-and-folders). Wins over the label. |
-| `secret` | | Base32 secret. Required. |
-| `algorithm` | `SHA1` | `SHA1`, `SHA256` or `SHA512`. |
-| `digits` | `6` | 6 to 8. |
-| `period` | `30` | Seconds, 1 to 3600. |
+| Part | Default | Contract |
+| --- | --- | --- |
+| label | empty | URL-encoded `issuer:account`; account optional |
+| `issuer` | label issuer | Free text, displayed bold; `/` creates folders; wins over label |
+| `secret` | required | Base32 |
+| `algorithm` | `SHA1` | SHA1, SHA256 or SHA512 |
+| `digits` | `6` | 6–8 |
+| `period` | `30` | Seconds, 1–3600 |
 
-Only TOTP ([RFC 6238](https://www.rfc-editor.org/rfc/rfc6238)) is supported:
-no HOTP counters. Default values are not written. Without an issuer, an
-account containing `:` is written with a leading colon (`otpauth://totp/:a:b`)
-so it reads back as an account.
+TOTP follows [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238); HOTP counters
+are unsupported. Default parameters are omitted. An issuerless account
+containing `:` is encoded with a leading colon (`otpauth://totp/:a:b`).
 
 ## Order
 
-Alphabetical, case-insensitive: the file on `issuer` then `account`, the
-list on the name shown. There is no other order and no way to move a token:
-rename it.
+Case-insensitive alphabetical: file by issuer/account, GUI by displayed name.
+Rename to change ordering; there is no manual movement.
 
 ## Names and folders
 
-`issuer` and `account` are free text. In `issuer`, `/` separates folders:
-`Azure/fleurent(perso)` and `Azure/fleurent(admin)` show as an `Azure` card,
-the size of a token, with its token count. Click it to open the folder: its
-list replaces the main one, with *‹ Azure* on top to come back (Escape,
-Backspace or Alt+Left too). Folders nest (`Work/Azure/admin`). A search lists
-every match, whatever its folder, under its full name. Folders exist only
-through names: renaming the last token out of a folder removes it.
+Issuer/account are free text. Issuer `/` creates nested folders:
+`Azure/admin` and `Azure/perso` share an Azure card with a count. Click replaces
+the list with its contents; Escape, Backspace or Alt+Left returns. Search
+shows full names across folders. A folder disappears when no names inhabit it.
 
-Two more rules, for display only (the file keeps `issuer` and `account`):
+- **An issuer with at least two tokens with accounts groups those accounts.**
+  `Microsoft:a`, `Microsoft:b`, `Microsoft/c` share a Microsoft folder; a lone
+  account remains a token card.
+- **A token named like a folder goes inside it**, under its name; cards and
+  folders do not share a name. Accountless duplicate issuers remain separate
+  cards. Names match exactly (`Github` and `GitHub` differ), with alphabetical
+  order inside each folder.
 
-- **An issuer with at least 2 tokens with an account becomes a folder of its
-  accounts.** `Microsoft:a`, `Microsoft:b` and `Microsoft/c` show as a
-  `Microsoft` folder holding `a`, `b` and `c`. With a single account, the
-  token stays as it is: issuer in bold, account next to it.
-- **A token named like a folder goes inside it**, under its name: `Azure`
-  (no account) next to `Azure/CN` and `Azure/admin` is the third entry of the
-  `Azure` folder. A card and a folder never share a name.
-
-Tokens without an account are never grouped (two `GitHub` stay two cards: give
-them an account). Names are compared exactly: `Github` and `GitHub` are two
-issuers. Inside a folder, entries are in alphabetical order on the name shown.
-
-In edit mode, a folder card has a rename tool: the new path replaces the
-folder in the `issuer` of every token inside, sub-folders and the folder's own
-tokens included (`Azure` → `Cloud/Azure` moves `Azure/fleurent(perso)` to
-`Cloud/Azure/fleurent(perso)`, and `Azure:x` to `Cloud/Azure:x`). An
-existing folder name merges both; an empty name takes the tokens out of every
-folder (the folder's own tokens keep its last part as issuer). One write, like
-any change.
+Edit-mode folder rename replaces that issuer prefix for all descendants and
+own tokens in one write. Renaming to an existing path merges folders; an empty
+path removes hierarchy, with own tokens retaining the folder's last name.
 
 ## Reading and writing
 
-- The file is read strictly: blank lines and `#` comments are ignored, any
-  other line must be a valid `otpauth://totp/` link (secret, algorithm, digits
-  and period checked). One bad line makes the whole file unreadable; the error
-  gives its line number, never its content. The file is **never
-  overwritten**: fix it, or restore `tokens.crypt.bak`.
-- Without the agent or its key, the app shows the lock screen; *Retry* once
-  the agent is back.
-- Every change (import, rename, delete, new key) seals the whole file again
-  and rewrites it atomically, with mode 0600; the previous version is kept as
-  `tokens.crypt.bak`, sealed as well.
-- The file is reloaded when it changes on disk.
+Strict URI/secret/algorithm/digits/period validation rejects the whole file
+on one bad line. Errors disclose the line number, not its secret-bearing
+content; an unreadable file is **never overwritten**. Fix it or restore the
+sealed `tokens.crypt.bak`.
+
+Each change seals the entire store and writes it atomically with mode 0600,
+retaining the previous sealed version as `.bak`. Disk changes trigger reload.
+A nonempty clear file is accepted and sealed on load with `tokens.key` or the
+first agent key, without a backup of its clear contents.
+
+GUI Unlock/Retry checks the agent and reloads on each new page; missing
+agent/key produces its lock screen. Loaded tokens remain in memory when that
+page closes. [TRAY.md](TRAY.md#agent-and-pins) defines cached pin availability.
 
 ## Editing by hand
 
-Unseal, edit, seal again, with the
-[ssh-agent-crypt CLI](https://github.com/131/ssh-agent-crypt#install):
+Using the [ssh-agent-crypt CLI](https://github.com/131/ssh-agent-crypt#install):
 
 ```sh
 ssh-agent-crypt -decrypt < tokens.crypt > tokens.txt
@@ -109,69 +83,51 @@ ssh-agent-crypt SHA256:<key> < tokens.txt > tokens.crypt
 rm tokens.txt
 ```
 
-The running app follows the change. A `tokens.crypt` written in clear is
-accepted once: it is sealed at the next load with the configured key
-(`tokens.key`, else the first key of the agent), without a `.bak` copy of the
-clear version. Do not leave the clear `tokens.txt` around: prefer the import
-box.
+The running app follows file changes. Prefer Import rather than leaving clear
+`tokens.txt` on disk.
 
 ## Add
 
-The `+` button opens three tabs: *Add entry*, *Batch import* and, on the
-right, *Export*.
-
-*Add entry* takes one token: issuer (`/` for folders), account, base32 secret
-(spaces and case do not matter), algorithm (SHA1, SHA256, SHA512), digits (6
-to 8) and period (seconds, default 30). A token already present (same secret,
-issuer and account) is refused.
+The Add dialog has Add entry, Batch import and Export tabs. Add entry takes
+issuer, account, base32 secret (spaces/case ignored), algorithm, digits and
+period. Same secret/issuer/account is a duplicate and is refused.
 
 ## Import
 
-*Batch import* takes everything at once in one box, one token per line, in any
-mix:
+Batch import accepts mixed newline-separated formats:
 
 | Format | Example |
-|--------|---------|
-| `otpauth://totp/` link | `otpauth://totp/GitHub:fake-user?secret=JBSWY3DPEHPK3PXP&issuer=GitHub` |
-| Google Authenticator export | `otpauth-migration://offline?data=…` (several tokens per link) |
-| bare secret | `JBSWY3DPEHPK3PXP` |
-| label and secret | `github 131 JBSW Y3DP EHPK 3PXP` |
-| explicit label | `AWS root: JBSWY3DPEHPK3PXP`, `AWS root:JBSWY3DPEHPK3PXP` |
-| issuer and account | `Azure:fleurent JBSWY3DPEHPK3PXP` |
+| --- | --- |
+| otpauth URI | `otpauth://totp/GitHub:fake-user?secret=JBSWY3DPEHPK3PXP&issuer=GitHub` |
+| Google Authenticator export | `otpauth-migration://offline?data=…` |
+| Bare base32 | `JBSWY3DPEHPK3PXP` |
+| Label + secret/groups | `github 131 JBSW Y3DP EHPK 3PXP` |
+| Explicit label | `AWS root: JBSWY3DPEHPK3PXP` or `AWS root:JBSWY3DPEHPK3PXP` |
+| Issuer/account | `Azure:fake-user JBSWY3DPEHPK3PXP` |
 
-A bare secret is the last word (16 characters or more) or the trailing groups
-of 4 characters; what comes before is the label (the issuer, or
-`issuer:account`). Tokens already present (same secret, issuer and account)
-are skipped. HOTP entries and lines not understood are reported and left in
-the box, the rest is imported.
+The final word (16+ characters) or trailing groups of four supply a bare
+secret. Earlier text is its label. Duplicates are skipped; HOTP and unsupported
+lines are reported and remain in the input while valid entries are imported.
 
 ## Export
 
-*Export* (last tab of `+`) shows the unsealed file, one `otpauth://totp/`
-link per line: secrets in clear, to import into another device or keep as a
-backup. A warning comes first; the text is masked until shown (eye), copied by
-the copy tool or a click on the masked text, and dropped when the tab or the
-dialog closes. The links import back as they are.
+Export returns clear otpauth URIs with a warning, initially masked. The eye
+reveals them; the copy tool or masked-text click copies them. Closing the tab
+or dialog drops the text. Exported links import back unchanged.
 
 ## Changing the key
 
-The SSH key chosen in the settings (`tokens.key`) seals the file. Choosing
-another one seals it again with the new key at once; the former key is no
-longer needed, except to open older `.bak` copies.
+Selecting `tokens.key` reseals the store immediately. The previous key is
+only needed for older backups.
 
 ## Tray pins
 
-The pin/unpin icon beside each token in edit mode selects notification-area
-shortcuts without opening the rename dialog. Pins are
-stored inside the sealed file as the optional `pinned=true` otpauth query
-parameter (also preserved by export/import); absent means unpinned.
-Pinning does not change the main list order. Tray behavior and the names-only
-menu compromise are defined in [TRAY.md](TRAY.md).
+Edit mode toggles the same pin glyph's pressed state. `pinned=true` is part
+of the sealed URI and survives export/import; absence means unpinned. Pins
+do not alter GUI order. [TRAY.md](TRAY.md) defines the names-only shortcut menu.
 
 ## Live codes and progress
 
-Codes and validity ends are recomputed at expiry. The list refreshes through
-multiple cycles without user interaction, including when a native menu is
-open. Progress grows clockwise from twelve o'clock and resets with each new
-validity period; the shared visual convention is defined in
-[TRAY.md](TRAY.md#shared-motion-and-refresh-contract).
+Expiry recomputes codes/validity without interaction, including during native
+menus. Rings grow clockwise from twelve o'clock and reset per token period;
+see the [shared motion contract](TRAY.md#shared-motion-and-refresh-contract).

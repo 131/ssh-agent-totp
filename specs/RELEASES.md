@@ -2,85 +2,52 @@
 
 ## Publishing a release
 
-1. From a clean `master`, let [ppackage](https://github.com/131/ppackage)
-   bump the version marker (`// version:` in `go.mod`), commit and tag, then
-   push. Never create tags or GitHub releases by hand.
+From a clean `master`, [ppackage](https://github.com/131/ppackage) aligns root
+version markers and creates the version commit/lightweight tag:
 
-   ```sh
-   ppackage version patch   # or minor, major, X.Y.Z, X.Y.Z-beta.N
-   git push origin master vX.Y.Z
-   ```
+```sh
+ppackage version patch   # or minor, major, X.Y.Z, X.Y.Z-beta.N
+git push origin master vX.Y.Z
+```
 
-   Name the tag: ppackage creates a lightweight tag, which
-   `git push --follow-tags` does not send.
-
-   `-beta.N` versions are published as prereleases.
-
-2. The `release` workflow (`.github/workflows/release.yml`, GitHub environment
-   `production`) runs the tests, then GoReleaser
-   ([`.goreleaser.yaml`](../.goreleaser.yaml)) builds
-   `ssh-agent-totp-windows-amd64.exe`, signs it with Authenticode through
-   `SIGNING_SERVER` ([131/gh-actions](https://github.com/131/gh-actions)
-   `sign-binaries`) and publishes it with `SHA256SUMS`.
-
-3. Promote the tag to a channel in [`manifest.json`](../manifest.json) and push
-   to the default branch: installed applications follow it.
-
-The `production` environment protects the signing secret (restrict it to `v*`
-tags); it is not a release channel.
-
-The first release is `ppackage version minor` (0.0.0 → v0.1.0): `manifest.json`
-already points both channels to `v0.1.0`. Until it is published, the settings
-panel reports that no release exists yet.
+Push the exact tag: `--follow-tags` does not send lightweight tags. Never
+create release tags or GitHub releases by hand. `-beta.N` tags are prereleases.
+The `release` workflow runs tests, then [GoReleaser](../.goreleaser.yaml) builds
+`ssh-agent-totp-windows-amd64.exe`, signs via `SIGNING_SERVER` and publishes it
+with `SHA256SUMS`. The GitHub `production` environment protects signing
+credentials; it is not a release channel. After CI, assets and signature are
+verified, promote the tag in [`manifest.json`](../manifest.json) and push.
 
 ## Channels
 
-`manifest.json`, at the root of the upstream default branch, maps each channel
-to a release tag:
-
-```json
-{
-  "production": "v0.1.0",
-  "beta": "v0.2.0-beta.1"
-}
-```
-
-The application reads it from
-`https://raw.githubusercontent.com/<owner>/<repo>/HEAD/manifest.json` and keeps
-it in its settings cache (see [SETTINGS.md](SETTINGS.md#channels)). The channel
-selector of the settings panel lists its keys.
+The root manifest maps channel names to release tags. The settings selector
+lists its keys. The app reads
+`https://raw.githubusercontent.com/<owner>/<repo>/HEAD/manifest.json` and
+uses the [settings cache](SETTINGS.md#channels).
 
 ## Update
 
-The GUI document requests the automatic check when it loads; *Check for
-updates* requests an explicit refresh. Tray-only startup does not create a
-browser or initiate this page-driven check. When the followed channel points
-to a newer version, the current GUI offers the update in a notification.
-The update service belongs to the resident application, so its settings and
-cached results outlive a GUI session (see
-[the application contract](TRAY.md#application-contract)).
-The binary is downloaded next to the executable and installed only if:
+Each GUI document requests an automatic check; *Check for updates* explicitly
+refreshes it. Tray-only startup does not trigger the page-driven check.
+Settings/cached results belong to the resident service and outlive the page.
+A newer followed version produces an install notification in the GUI.
+The executable is downloaded beside the running one and accepted only when:
 
-- its SHA-256 matches the release `SHA256SUMS`;
-- Windows trusts its Authenticode signature (whole chain, revocation checked);
-- its signer is the same as the running executable's.
+- SHA-256 matches the release `SHA256SUMS`;
+- Windows trusts the Authenticode chain, including revocation;
+- the signer matches the running executable's.
 
-The new version then replaces the old one and restarts; the previous binary is
-removed at the next start. The executable's folder must be writable by the user.
+Installation replaces/restarts the executable; cleanup removes the previous
+binary on the next start. Its directory must be writable. Downgrades are
+not offered; switching back from beta waits for a newer production release.
+Unsigned/development builds cannot self-update. `update.enable: false`
+disables every GitHub request.
 
-- Downgrades are never offered: switching from `beta` back to `production`
-  waits for the next production release.
-- Unsigned or development builds never update themselves: the first install
-  must be a signed release, and an end-to-end update can only be observed from
-  the second release.
-- `update.enable: false` in the settings disables every request to GitHub.
-
-`SSH_AGENT_TOTP_VERIFY_SIGNED=<signed exe> go test ./internal/update` runs the
-Authenticode check against a real signed binary on Windows.
+On Windows, `SSH_AGENT_TOTP_VERIFY_SIGNED=<signed exe> go test ./internal/update`
+checks the actual signature-verification path.
 
 ## Installation feedback
 
-The update action stays disabled, with a download spinner, until download,
-checksum/signature verification and restart finish. Failures leave the same
-action available for retry. Toasts are hosted inside the currently open modal
-dialog so their first click is actionable, not intercepted by its backdrop.
+The install action stays disabled with a spinner through download,
+verification and restart. Failure restores it for retry. Toasts belong to the
+currently open modal dialog, so their first click is actionable.

@@ -1,87 +1,57 @@
 # Settings
 
-The application preferences live in one YAML file, outside of any repository:
-
-```
-%APPDATA%\ssh-agent-totp\settings.yml
-```
-
-(`os.UserConfigDir()`, so `~/.config/ssh-agent-totp/settings.yml` elsewhere.)
-A missing file means defaults; a missing key takes its default. The file is
-written when you change a setting from the settings panel and when the channel
-list is refreshed ([releases](RELEASES.md)). An unreadable file is reported and
-never overwritten: fix it or delete it.
-
-Windows startup registration is managed by its OS shortcut, not duplicated
-in this YAML file (see Launch on startup below).
-
-It holds preferences and caches only, never secrets: the tokens are in
-[`tokens.crypt`](TOKENS.md), next to it.
+Preferences/cache live in `%APPDATA%\ssh-agent-totp\settings.yml`
+(`os.UserConfigDir()`, `~/.config/ssh-agent-totp/settings.yml` elsewhere).
+Missing files/keys use defaults; unreadable files are reported and never
+overwritten. GUI edits and manifest refreshes write the file. It holds no
+secrets: [tokens.crypt](TOKENS.md) is beside it; startup state is an OS shortcut.
 
 ## Example
 
 ```yaml
-# ssh-agent-totp settings: https://github.com/131/ssh-agent-totp/blob/master/specs/SETTINGS.md
 update:
   enable: true
   upstream: https://github.com/131/ssh-agent-totp
   channel: production
 language: en-us
 tokens:
-  key: SHA256:Xn0kQ7cTt3uY0d2bLr8yWq5vH1sJm4pZfGa6eNiC9oE
-remote_channels:
-  upstream: https://github.com/131/ssh-agent-totp
-  ttl: 86400
-  fetched: 2026-10-26T12:00:00Z
-  list:
-    beta: v0.1.0
-    production: v0.1.0
+  path: '%USERPROFILE%\OneDrive\tokens.crypt'
 ```
 
 ## Keys
 
-| Key | Default | Configurable in UI | |
-|-----|---------|:------------------:|-|
-| `language` | `fr-fr` | yes | `fr-fr` or `en-us`, for the window, notifications, errors and tray menu; applied at once. Unknown values fall back to `fr-fr`. |
-| `tokens.key` | first agent key | yes | SHA-256 fingerprint of the SSH key sealing `tokens.crypt` ([changing the key](TOKENS.md#changing-the-key)). |
-| `tokens.path` | `tokens.crypt` next to this file | no | Token file, not written while it is the default. `%VARIABLE%` and `$VARIABLE` are expanded, e.g. `%USERPROFILE%\OneDrive\tokens.crypt`. Shown in the settings panel and the status bar. |
-| `update.enable` | `true` | yes | *Automatic updates* switch. `false` disables auto-update: no request to GitHub, channel and check are hidden. |
-| `update.channel` | `production` | yes | Channel followed, one of the manifest keys. An unknown channel falls back to `production`. |
-| `update.upstream` | `https://github.com/131/ssh-agent-totp` | no | GitHub repository providing `manifest.json` and the releases, `https://github.com/<owner>/<repo>`. Shown in the settings panel. |
-| `remote_channels` | | no | Cache of the upstream `manifest.json`, managed by the application. |
+| Key | Default | UI | Behavior |
+| --- | --- | --- | --- |
+| `language` | `fr-fr` | yes | `fr-fr` or `en-us`, applied at once to page/tray/errors; unknown values fall back to French |
+| `tokens.key` | first agent key | yes | SSH SHA-256 fingerprint; changing it [reseals the store](TOKENS.md#changing-the-key) |
+| `tokens.path` | adjacent `tokens.crypt` | no | Expands `%VARIABLE%`/`$VARIABLE`; default omitted from writes; displayed in settings/status bar |
+| `update.enable` | `true` | yes | `false` disables GitHub requests and hides channel/check controls |
+| `update.channel` | `production` | yes | Manifest key; unknown values fall back to production |
+| `update.upstream` | `https://github.com/131/ssh-agent-totp` | no | GitHub repository supplying manifest/releases; shown in settings |
+| `remote_channels` | absent | no | Managed manifest cache |
 
-The settings panel is the wrench after the brand/logo at the top left of the window. It also shows
-the token file, the running and latest versions, an *Export* button
-([export](TOKENS.md#export)) and a *Check for updates* button, which fetches
-`manifest.json` again whatever the cache.
+The wrench after the logo opens settings: token file, agent key, language,
+startup, channels and version/check controls. Export belongs to the Add dialog,
+not settings; see [Export](TOKENS.md#export).
 
 ## Channels
 
-The upstream [`manifest.json`](RELEASES.md#channels) is kept in
-`remote_channels` for `ttl` seconds (default 86400, one day; lower it to follow
-releases sooner) after `fetched`; *Check for updates* ignores it. When the
-upstream changes, the cache is ignored. When GitHub is unreachable, a stale
-cache of the same upstream is still used. Delete `remote_channels` to force a
-refresh.
+`remote_channels` stores `upstream`, `ttl` (default 86400 seconds), `fetched`
+and manifest `list`. An upstream change invalidates it; *Check for updates*
+ignores its TTL. When GitHub is unreachable, a stale cache from the same
+upstream can be used. Lower TTL to follow releases sooner or remove this
+cache to force refresh.
 
 ## Launch on startup (Windows)
 
-The settings panel has a boolean *Launch on startup* switch. It manages
-`ssh-agent-totp.lnk` in the current user's Windows Startup known folder
-(`shell:startup`), not Internet Explorer, the registry, or the all-users folder.
+*Launch on startup* manages `ssh-agent-totp.lnk` in the current user's Startup
+known folder (`shell:startup`). Presence is the persisted boolean; there is
+no YAML duplicate. Opening settings rereads it. Enable creates/updates the
+shortcut; disable removes only that entry. Errors restore the toggle's prior
+state; other entries are untouched.
 
-The shortcut's presence is the persisted state: absent means off. There is
-no duplicate YAML flag. Opening settings reads it again; enabling creates or
-updates the shortcut to the running executable, and disabling removes only
-that shortcut. Other startup entries are left untouched. Errors are shown
-and the toggle returns to its previous state.
-
-The shortcut uses the executable's directory as its working directory and
-launches the resident tray at sign-in, with no WebView until Open or
-double-click (see [the application contract](TRAY.md#application-contract)).
-Auto-update keeps the executable path, so the shortcut remains valid. Windows policy or Task Manager can
-override startup execution; this switch manages the shortcut registration.
-
-Dev builds redirect the Startup known-folder provider through an uncommitted
-Go overlay into the test APPDATA directory. Tests never register the dev app
-in the operator's actual startup folder.
+The shortcut targets the executable with its directory as working directory
+and starts the resident tray, without a browser until Open/double-click.
+Auto-update preserves the path. Windows policy/Task Manager can override
+execution; the switch controls registration. Dev checks redirect the folder
+provider into test APPDATA, never the operator's actual startup folder.
