@@ -44,6 +44,13 @@ function Browser-Tree([int]$Owner) {
  }
  return $result
 }
+# Visibility is the publication boundary: a hidden HWND can exist while its
+# controller/frame are still being constructed and is not yet an open session.
+function Visible-Gui([int]$Owner) {
+ $window = [LifecycleWin]::Find($Owner, 'webview')
+ if ($window -ne [IntPtr]::Zero -and [LifecycleWin]::IsWindowVisible($window)) { return $window }
+ return [IntPtr]::Zero
+}
 function Post([IntPtr]$Window, [uint32]$Message) {
  if (-not [LifecycleWin]::PostMessage($Window, $Message, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'PostMessage failed' }
 }
@@ -55,7 +62,8 @@ $env:SSH_AUTH_SOCK = '\\.\pipe\ssh-agent-totp-no-agent-test'
 $settings = Join-Path $env:APPDATA 'ssh-agent-totp'
 New-Item -ItemType Directory -Path $settings -Force | Out-Null
 Set-Content -Path (Join-Path $settings 'settings.yml') -Encoding UTF8 -Value "update:`n  enable: false"
-$process = Start-Process $Executable -PassThru
+$stderr = Join-Path $testData 'application.stderr'
+$process = Start-Process $Executable -PassThru -RedirectStandardError $stderr
 $hostWindow = [IntPtr]::Zero
 try {
  Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray') -ne [IntPtr]::Zero } 'No tray host'
@@ -68,7 +76,7 @@ try {
  $show = [LifecycleWin]::RegisterWindowMessage('ssh-agent-totp-show')
  for ($cycle = 1; $cycle -le 3; $cycle++) {
   Post $hostWindow $show
-  Wait-For { [LifecycleWin]::Find($process.Id, 'webview') -ne [IntPtr]::Zero } 'GUI did not open'
+  Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'GUI did not open'
   $gui = [LifecycleWin]::Find($process.Id, 'webview')
   Wait-For { @(Browser-Tree $process.Id).Count -gt 0 } 'No browser processes on Open'
   # Let the page's async bindings and lock screen initialize before closing.
@@ -84,16 +92,16 @@ try {
  $second = Start-Process $Executable -PassThru
  if (-not $second.WaitForExit(10000)) { throw 'Second instance did not exit' }
  if ($second.ExitCode -ne 0) { throw 'Second instance failed' }
- Wait-For { [LifecycleWin]::Find($process.Id, 'webview') -ne [IntPtr]::Zero } 'Second launch did not recreate GUI'
+ Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'Second launch did not recreate GUI'
  $gui = [LifecycleWin]::Find($process.Id, 'webview')
  Wait-For { @(Browser-Tree $process.Id).Count -gt 0 } 'Second launch did not start browser'
  'PASS: second launch recreates GUI in the original process'
  # Immediate close/open must not crash or terminate the host's queue.
  Post $gui 0x10
  Post $hostWindow $show
- Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'webview') -ne [IntPtr]::Zero } 'Rapid reopen failed'
+ Wait-For { $process.HasExited -or (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'Rapid reopen failed'
  Start-Sleep -Seconds 2
- if ($process.HasExited) { throw 'Rapid reopen crashed the application' }
+ if ($process.HasExited) { throw 'Rapid reopen exited the application' }
  $gui = [LifecycleWin]::Find($process.Id, 'webview')
  if ($gui -eq [IntPtr]::Zero) { throw 'Rapid reopen left no GUI' }
  $browsers = @(Browser-Tree $process.Id)
@@ -105,7 +113,8 @@ try {
  if (-not $process.WaitForExit(10000)) { throw 'Quit without GUI did not exit' }
  'PASS: Quit without GUI'
  # Quit queued behind Open must still terminate during WebView initialization.
- $process = Start-Process $Executable -PassThru
+ $stderr = Join-Path $testData 'initialization.stderr'
+ $process = Start-Process $Executable -PassThru -RedirectStandardError $stderr
  $hostWindow = [IntPtr]::Zero
  Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray') -ne [IntPtr]::Zero } 'No host for initialization-quit check'
  if ($process.HasExited) { throw 'App exited before initialization-quit check' }
@@ -113,9 +122,13 @@ try {
  Post $hostWindow $show
  Post $hostWindow 0x10
  if (-not $process.WaitForExit(20000)) { throw 'Quit during WebView initialization did not exit' }
+ if ($process.ExitCode -ne 0) { throw 'Quit during initialization failed' }
  'PASS: Quit during WebView initialization'
 } catch {
  $message = $_.Exception.Message -replace '[\r\n]', ' '
+ if ($process.HasExited) { $message += "; exit code=$($process.ExitCode)" }
+ $details = @(Get-Content $stderr -Tail 20 -ErrorAction SilentlyContinue) -join ' | '
+ if ($details) { $message += "; stderr=$details" }
  Write-Output "::error::$message"
  throw
 } finally {
