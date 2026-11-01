@@ -2,9 +2,10 @@
 
 ## Application contract
 
-**Permanent tray, dynamic WebView.** One native process owns the resident
-services, host HWND, clipboard, clock and notification icon. The GUI is an
-optional session, not the application's owner; there is no IPC.
+**Permanent tray, dynamic WebView.** `Runtime` owns the resident services,
+host HWND, clipboard, clock and notification icon. An optional `WindowSession`
+owns the GUI/frame/bridge, not the application. Both use one native process
+and UI thread; there is no IPC.
 
 | Action | GUI | Resident tray |
 | --- | --- | --- |

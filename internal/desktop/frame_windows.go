@@ -1,4 +1,4 @@
-package tray
+package desktop
 
 import (
 	"syscall"
@@ -47,29 +47,54 @@ var edges = map[string]uintptr{
 	"bottom-right": 17,
 }
 
-// Attach connects the lazily created GUI to the tray's independent host.
-func (t *Tray) Attach(hwnd uintptr) {
-	t.window = hwnd
-	if t.frameCallback == 0 {
-		t.frameCallback = syscall.NewCallback(t.frameProc)
+// Frame owns native styling and actions for one optional GUI session.
+type Frame struct {
+	Close            func()
+	AfterModal       func()
+	window, original uintptr
+	attached         bool
+}
+
+// A single callback plus HWND lookup avoids permanently rooting a Go closure
+// for every disposable session. Detach removes the session from the lookup.
+var frames = map[uintptr]*Frame{}
+var frameCallback = syscall.NewCallback(func(hwnd, msg, wparam, lparam uintptr) uintptr {
+	if f := frames[hwnd]; f != nil {
+		return f.frameProc(hwnd, msg, wparam, lparam)
 	}
-	t.windowOriginal, _, _ = procSetWindowLong.Call(hwnd, gwlpWndProc, t.frameCallback)
+	result, _, _ := procDefWindowProc.Call(hwnd, msg, wparam, lparam)
+	return result
+})
+
+func NewFrame(hwnd uintptr, close, afterModal func()) *Frame {
+	f := &Frame{window: hwnd, Close: close, AfterModal: afterModal}
+	f.Attach()
+	return f
+}
+
+func (t *Frame) Attach() {
+	if t.attached {
+		return
+	}
+	frames[t.window] = t
+	t.original, _, _ = procSetWindowLong.Call(t.window, gwlpWndProc, frameCallback)
+	t.attached = true
 	t.Borderless()
 }
 
 // Detach restores the GUI's original procedure before the browser destroys it.
-func (t *Tray) Detach() {
-	if t.window != 0 {
-		procSetWindowLong.Call(t.window, gwlpWndProc, t.windowOriginal)
-		t.window, t.windowOriginal = 0, 0
-		t.borderless = false
+func (t *Frame) Detach() {
+	if t.attached {
+		procSetWindowLong.Call(t.window, gwlpWndProc, t.original)
+		delete(frames, t.window)
+		t.attached = false
 	}
 }
 
-func (t *Tray) frameProc(hwnd, msg, wparam, lparam uintptr) uintptr {
+func (t *Frame) frameProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	switch msg {
 	case wmNcCalcSize:
-		if wparam != 0 && t.borderless {
+		if wparam != 0 {
 			return 0
 		}
 	case wmClose:
@@ -82,7 +107,7 @@ func (t *Tray) frameProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			t.AfterModal()
 		}
 	}
-	result, _, _ := procCallWindowProc.Call(t.windowOriginal, hwnd, msg, wparam, lparam)
+	result, _, _ := procCallWindowProc.Call(t.original, hwnd, msg, wparam, lparam)
 	if msg == wmSize && wparam == sizeMinimized {
 		procShowWindow.Call(hwnd, swHide)
 	}
@@ -90,8 +115,7 @@ func (t *Tray) frameProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 }
 
 // Borderless removes the title bar; the window cannot be maximized.
-func (t *Tray) Borderless() {
-	t.borderless = true
+func (t *Frame) Borderless() {
 	style, _, _ := procGetWindowLong.Call(t.window, gwlStyle)
 	procSetWindowLong.Call(t.window, gwlStyle, style&^wsMaximizeBox)
 	// One pixel of DWM frame is enough for the shadow.
@@ -106,8 +130,8 @@ func (t *Tray) Borderless() {
 
 // Frame runs a title bar action of the UI, on the window thread: "drag",
 // "minimize", "close" or a resize edge ("left", "bottom-right"…).
-func (t *Tray) Frame(action string) bool {
-	if t.window == 0 {
+func (t *Frame) Action(action string) bool {
+	if !t.attached {
 		return false
 	}
 	switch action {
@@ -129,4 +153,11 @@ func (t *Tray) Frame(action string) bool {
 		procPostMessage.Call(t.window, wmNcLButtonDown, edge, 0)
 	}
 	return true
+}
+
+func (t *Frame) Show() {
+	if t.attached {
+		procShowWindow.Call(t.window, swRestore)
+		procSetForeground.Call(t.window)
+	}
 }

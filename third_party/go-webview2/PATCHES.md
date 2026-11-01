@@ -13,6 +13,10 @@ The app owns a persistent native message loop. This copy adds:
   and after native modal loops.
 - Balanced COM ownership: GetCoreWebView2 already returns a reference, and
   the settings reference is released after configuration.
+- `WindowOptions.Hidden` creates the GUI without displaying an unowned window
+  during initialization. The resident runtime shows its completed session.
+- The environment-creation pump propagates WM_QUIT instead of reporting an
+  interrupted initialization as successful.
 - Closed views reject late dispatch/evaluation and Close is idempotent.
 
 DLLs stay loaded. Closing the last controller lets WebView2 terminate its

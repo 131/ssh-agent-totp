@@ -105,7 +105,11 @@ func (e *Chromium) Embed(hwnd uintptr) bool {
 			0,
 		)
 		if r == 0 {
-			break
+			w32.User32PostQuitMessage.Call(msg.WParam)
+			return false
+		}
+		if int32(r) < 0 {
+			return false
 		}
 		_, _, _ = w32.User32TranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		_, _, _ = w32.User32DispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))

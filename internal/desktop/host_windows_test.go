@@ -1,4 +1,4 @@
-package tray
+package desktop
 
 import (
 	"runtime"
@@ -14,7 +14,7 @@ func TestNativeHostBeforeGUI(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	var ticks clock.Clock
-	icon, err := New(&ticks)
+	icon, err := New(&ticks, "ssh-agent-totp-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,14 +22,11 @@ func TestNativeHostBeforeGUI(t *testing.T) {
 		icon.Quit()
 		icon.runUntil(func() bool { return false })
 	}()
-	if icon.Window() == 0 || icon.window != 0 {
+	if icon.Window() == 0 {
 		t.Fatal("tray requires a GUI")
 	}
 	if visible, _, _ := user32.NewProc("IsWindowVisible").Call(icon.Window()); visible != 0 {
 		t.Fatal("tray host is visible")
-	}
-	if icon.Frame("close") {
-		t.Fatal("frame action accepted before a GUI exists")
 	}
 	ready := false
 	icon.Dispatch(func() { ready = true })
@@ -48,7 +45,7 @@ func TestQuitWithoutGUI(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	var ticks clock.Clock
-	icon, err := New(&ticks)
+	icon, err := New(&ticks, "ssh-agent-totp-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +62,7 @@ func TestAttachedFrameClosesWithoutQuittingTray(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	var ticks clock.Clock
-	icon, err := New(&ticks)
+	icon, err := New(&ticks, "ssh-agent-totp-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,17 +70,14 @@ func TestAttachedFrameClosesWithoutQuittingTray(t *testing.T) {
 		icon.Quit()
 		icon.runUntil(func() bool { return false })
 	}()
-	name, _ := windows.UTF16PtrFromString(hostClass)
-	frame, _, err := procCreateWindow.Call(0, uintptr(unsafe.Pointer(name)), 0, 0, 0, 0, 0, 0, 0, 0, uintptr(icon.instance), 0)
+	name, _ := windows.UTF16PtrFromString("STATIC")
+	frame, _, err := procCreateWindow.Call(0, uintptr(unsafe.Pointer(name)), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 	if frame == 0 {
 		t.Fatal(err)
 	}
-	icon.Attach(frame)
-	icon.Close = func() {
-		icon.Detach()
-		procDestroyWindow.Call(frame)
-	}
-	if !icon.Frame("close") {
+	var gui *Frame
+	gui = NewFrame(frame, func() { gui.Detach(); procDestroyWindow.Call(frame) }, nil)
+	if !gui.Action("close") {
 		t.Fatal("frame close rejected")
 	}
 	done := false
@@ -91,10 +85,13 @@ func TestAttachedFrameClosesWithoutQuittingTray(t *testing.T) {
 	if !icon.runUntil(func() bool { return done }) {
 		t.Fatal("frame close quit the tray")
 	}
+	if frames[frame] != nil {
+		t.Fatal("closed frame retained its session lookup")
+	}
 	if exists, _, _ := user32.NewProc("IsWindow").Call(frame); exists != 0 {
 		t.Fatal("frame close did not destroy the GUI")
 	}
 	if visible, _, _ := user32.NewProc("IsWindowVisible").Call(frame); visible != 0 {
-		t.Fatal("frame close did not hide the GUI")
+		t.Fatal("frame close left a visible GUI")
 	}
 }

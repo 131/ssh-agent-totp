@@ -1,4 +1,4 @@
-package tray
+package desktop
 
 import (
 	"sync"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestDispatchQueue(t *testing.T) {
-	tray := &Tray{}
+	tray := &Host{}
 	var sent sync.WaitGroup
 	count := 0
 	for i := 0; i < 20; i++ {

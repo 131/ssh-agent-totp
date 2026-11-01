@@ -1,10 +1,8 @@
-// Package tray keeps the window in the notification area: minimizing or
-// closing hides it, a single click opens shortcuts, and a double click restores it.
+// Package tray owns the notification icon and native shortcut menu.
 package tray
 
 import (
 	"strings"
-	"syscall"
 	"time"
 	"unsafe"
 
@@ -18,10 +16,6 @@ import (
 var (
 	user32              = windows.NewLazySystemDLL("user32.dll")
 	shell32             = windows.NewLazySystemDLL("shell32.dll")
-	kernel32            = windows.NewLazySystemDLL("kernel32.dll")
-	procSetWindowLong   = user32.NewProc("SetWindowLongPtrW")
-	procCallWindowProc  = user32.NewProc("CallWindowProcW")
-	procShowWindow      = user32.NewProc("ShowWindow")
 	procSetForeground   = user32.NewProc("SetForegroundWindow")
 	procLoadImage       = user32.NewProc("LoadImageW")
 	procGetSystemMetric = user32.NewProc("GetSystemMetrics")
@@ -32,31 +26,18 @@ var (
 	procGetCursorPos    = user32.NewProc("GetCursorPos")
 	procPostMessage     = user32.NewProc("PostMessageW")
 	procRegisterMessage = user32.NewProc("RegisterWindowMessageW")
-	procGetDpiForSystem = user32.NewProc("GetDpiForSystem")
 	procNotifyIcon      = shell32.NewProc("Shell_NotifyIconW")
-	procFindWindow      = user32.NewProc("FindWindowW")
 	procSetTimer        = user32.NewProc("SetTimer")
 	procKillTimer       = user32.NewProc("KillTimer")
 	procDoubleClickTime = user32.NewProc("GetDoubleClickTime")
-	procCreateMutex     = kernel32.NewProc("CreateMutexW")
 )
 
 const (
-	gwlpWndProc     = ^uintptr(3) // -4
-	wmDestroy       = 0x0002
-	wmSize          = 0x0005
-	wmClose         = 0x0010
-	wmCommand       = 0x0111
 	wmTimer         = 0x0113
-	wmExitSizeMove  = 0x0232
 	wmLButtonUp     = 0x0202
 	wmLButtonDblClk = 0x0203
 	wmRButtonUp     = 0x0205
 	wmTray          = 0x8000 + 1 // WM_APP + 1
-	wmDispatch      = 0x8000 + 2
-	sizeMinimized   = 1
-	swHide          = 0
-	swRestore       = 9
 	nimAdd          = 0
 	nimModify       = 1
 	nimDelete       = 2
@@ -77,7 +58,6 @@ const (
 )
 
 const (
-	clockTimerID    = 1
 	clickTimerID    = 2
 	firstPinCommand = 3
 	firstFrameID    = 2
@@ -109,13 +89,7 @@ type Tray struct {
 	CopyPinned     func(int)
 	AfterModal     func()
 	Open           func()
-	Close          func()
-	ProcessThread  func()
-	window         uintptr
-	windowOriginal uintptr
-	frameCallback  uintptr
-	dispatch       uiDispatch
-	clock          *clock.Clock
+	Quit           func()
 	instance       windows.Handle
 	flashUntil     time.Time
 	doubleClick    bool
@@ -124,11 +98,9 @@ type Tray struct {
 	menuBitmap     uintptr
 	menuPinCount   int
 	hwnd           uintptr
-	original       uintptr
 	data           notifyIconData
 	taskbarCreated uintptr
-	show           uintptr
-	borderless     bool
+	removed        bool
 }
 
 const WindowTitle = "ssh-agent-totp"
@@ -139,56 +111,8 @@ func registeredMessage(name string) uintptr {
 	return message
 }
 
-// ActivateExisting shows the window of an instance already running in this
-// session and reports whether one exists. Instances cannot share the WebView2
-// data folder, and one window is enough. After an update the new executable
-// waits (up to 15 s) for the previous instance to exit instead.
-func ActivateExisting(waitPrevious bool) bool {
-	name, _ := windows.UTF16PtrFromString(`Local\ssh-agent-totp`)
-	for attempt := 0; ; attempt++ {
-		handle, _, err := procCreateMutex.Call(0, 0, uintptr(unsafe.Pointer(name)))
-		if err != windows.ERROR_ALREADY_EXISTS {
-			return false
-		}
-
-		if !waitPrevious || attempt == 75 {
-			break
-		}
-		// Our handle keeps the mutex alive: release it before retrying.
-
-		windows.CloseHandle(windows.Handle(handle))
-		time.Sleep(200 * time.Millisecond)
-	}
-
-	class, _ := windows.UTF16PtrFromString(hostClass)
-	title, _ := windows.UTF16PtrFromString(WindowTitle)
-	if hwnd, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title))); hwnd != 0 {
-		procPostMessage.Call(hwnd, registeredMessage("ssh-agent-totp-show"), 0, 0)
-	}
-	return true
-}
-
-// Quit ends the application, as Quitter does.
-func (t *Tray) Quit() {
-	procPostMessage.Call(t.hwnd, wmClose, 0, 0)
-}
-
-// Scale converts 96-dpi window dimensions for the per-monitor-aware manifest.
-func Scale(value uint) uint {
-	if procGetDpiForSystem.Find() != nil {
-		return value
-	}
-
-	dpi, _, _ := procGetDpiForSystem.Call()
-	if dpi == 0 {
-		return value
-	}
-
-	return value * uint(dpi) / 96
-}
-
 func Install(hwnd uintptr, ticks *clock.Clock) *Tray {
-	t := &Tray{hwnd: hwnd, clock: ticks}
+	t := &Tray{hwnd: hwnd}
 	var instance windows.Handle
 	windows.GetModuleHandleEx(0, nil, &instance)
 	t.instance = instance
@@ -200,12 +124,9 @@ func Install(hwnd uintptr, ticks *clock.Clock) *Tray {
 	t.data.CbSize = uint32(unsafe.Sizeof(t.data))
 	copy(t.data.Tip[:len(t.data.Tip)-1], windows.StringToUTF16(WindowTitle))
 	t.taskbarCreated = registeredMessage("TaskbarCreated")
-	t.show = registeredMessage("ssh-agent-totp-show")
 	t.add()
-	t.original, _, _ = procSetWindowLong.Call(hwnd, gwlpWndProc, syscall.NewCallback(t.wndproc))
 	ticks.Subscribe(t.spin)
 	ticks.Subscribe(func(clock.Tick) { t.updateMenuIcon() })
-	procSetTimer.Call(hwnd, clockTimerID, 1000, 0)
 	return t
 }
 
@@ -214,16 +135,21 @@ func (t *Tray) add() {
 	procNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&t.data)))
 }
 
-// Show restores the window to report a tray action error.
-func (t *Tray) Show() { t.restore() }
+// Remove releases the notification resources; it does not end the runtime.
+func (t *Tray) Remove() {
+	if t.removed {
+		return
+	}
+	t.removed = true
+	procKillTimer.Call(t.hwnd, clickTimerID)
+	procNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&t.data)))
+	procDeleteObject.Call(t.menuBitmap)
+	t.menuBitmap = 0
+}
 
 func (t *Tray) restore() {
 	if t.Open != nil {
 		t.Open()
-	}
-	if t.window != 0 {
-		procShowWindow.Call(t.window, swRestore)
-		procSetForeground.Call(t.window)
 	}
 }
 
@@ -269,7 +195,9 @@ func (t *Tray) menu() {
 	case menuOpen:
 		t.restore()
 	case menuQuit:
-		t.Quit()
+		if t.Quit != nil {
+			t.Quit()
+		}
 	default:
 		if command >= firstPinCommand && command-firstPinCommand < uintptr(len(pins)) && t.CopyPinned != nil {
 			t.CopyPinned(pins[command-firstPinCommand].ID)
@@ -277,21 +205,16 @@ func (t *Tray) menu() {
 	}
 }
 
-func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
+// HandleMessage receives only icon/menu messages from the resident host.
+func (t *Tray) HandleMessage(hwnd, msg, wparam, lparam uintptr) (uintptr, bool) {
 	switch {
-	case msg == wmDispatch:
-		t.runDispatched()
-		return 0
-
 	case msg == wmTray:
 		switch lparam & 0xffff {
-
 		case wmLButtonUp:
 			if t.doubleClick {
 				t.doubleClick = false
 				break
 			}
-
 			delay, _, _ := procDoubleClickTime.Call()
 			procSetTimer.Call(hwnd, clickTimerID, delay, 0)
 		case wmLButtonDblClk:
@@ -302,34 +225,16 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			procKillTimer.Call(hwnd, clickTimerID)
 			t.menu()
 		}
-		return 0
-	case msg == wmExitSizeMove:
-		if t.AfterModal != nil {
-			t.AfterModal()
-		}
-	case msg == wmTimer && wparam == clockTimerID:
-		t.clock.Fire(time.Now())
-		return 0
+		return 0, true
 	case msg == wmTimer && wparam == clickTimerID:
 		procKillTimer.Call(hwnd, clickTimerID)
 		t.menu()
-		return 0
+		return 0, true
 	case msg == t.taskbarCreated && msg != 0:
 		t.add()
-	case msg == t.show && msg != 0:
-		t.restore()
-		return 0
-	case msg == wmClose:
-		procDestroyWindow.Call(hwnd)
-		return 0
-	case msg == wmDestroy:
-		procKillTimer.Call(hwnd, clockTimerID)
-		procKillTimer.Call(hwnd, clickTimerID)
-		procNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&t.data)))
-		procPostQuitMessage.Call(0)
+		return 0, true
 	}
-	result, _, _ := procCallWindowProc.Call(t.original, hwnd, msg, wparam, lparam)
-	return result
+	return 0, false
 }
 
 // spin reuses shared icon resources: one sector per second, no drawing loop.

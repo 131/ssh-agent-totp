@@ -24,22 +24,30 @@ The integration script uses temporary APPDATA, an unavailable agent and
 updates disabled. Use an isolated-mutex test build when another instance is
 running; never target the installed executable. Unit tests use fake crypt,
 not a real agent. For manual checks use a throwaway APPDATA; a clear token
-file is sealed on load. CI runs the nested tests and lifecycle check on Windows.
+file is sealed on load. CI ensures the WebView2 runtime, verifies its installer signature if needed,
+then runs the nested tests, native session bridge and lifecycle check on Windows.
+`SSH_AGENT_TOTP_NATIVE_TESTS=1 go test -run TestNativeSessionBridge .` opts into
+the real-GUI bridge test; other unit tests use disposable fake views.
 
 ## Native runtime and GUI session
 
 [TRAY.md](TRAY.md#application-contract) defines the resident-tray/dynamic-GUI
 contract and [agent/pin behavior](TRAY.md#agent-and-pins).
-`main_windows.go` composes one `App` and its stores, an invisible native host,
-tray and clock. `internal/tray` owns the persistent message loop and attached
-GUI frame. Each Open creates or restores one WebView on the same UI thread;
-Close detaches/destroys only that GUI and releases its browser references.
+`main_windows.go` bootstraps `Runtime` (`runtime_windows.go`), which owns one
+`App`, native host, tray, clock and optional `WindowSession`. `internal/desktop`
+provides the persistent HWND/message loop/dispatch/timer and native GUI frame;
+`internal/tray` handles only the notification icon and shortcut menu.
+`WindowSession` (`window_session_windows.go`) owns its WebView, frame, bridge
+and closed-state guard. Open constructs it hidden, then publishes/shows the
+completed session. Close detaches/destroys only that GUI and releases its
+browser references; a failed Close restores the same session for retry.
 
 Agent/file work runs off-thread; results return through HWND dispatch so
 native modal loops still deliver them. WM_APP and modal-loop completion drain
 the current WebView's private binding queue. Replies/window actions retain
-the originating view identity, and the one-time tick bridge skips closed
-views. No UI thread waits for browser-process exit. DLLs/COM may remain loaded.
+the originating session, whose dispatch guard drops work after Close; the
+one-time tick bridge skips closed sessions. Frame callbacks share one native
+procedure and remove their HWND lookup on detach, without retaining old sessions. No UI thread waits for browser-process exit. DLLs/COM may remain loaded.
 
 `third_party/go-webview2/` is the pinned local lifecycle patch; provenance,
 license, COM ownership, Close/dispatch API and scoped vet setting are in
@@ -51,10 +59,12 @@ data lives in the user cache directory under `ssh-agent-totp/webview`.
 
 | Path | Responsibility |
 | --- | --- |
-| `app.go`, `main_windows.go` | Services, API and runtime/GUI composition |
+| `app.go`, `main_windows.go` | Services/API and bootstrap |
+| `runtime_windows.go`, `window_session_windows.go` | Resident ownership and disposable GUI/bridge |
 | `ui/` | Embedded HTML, CSS and script, inlined into one page |
 | `internal/{tokens,totp}` | Sealed store, RFC 6238, import/export |
-| `internal/{tray,clock,clipboard}` | Native host/menu/frame, shared tick, private clipboard |
+| `internal/desktop`, `internal/tray` | Native host/frame/dispatch and notification icon/menu |
+| `internal/{clock,clipboard}` | Shared tick and private clipboard |
 | `internal/{update,startup}` | Verified updates and startup shortcut |
 | `internal/i18n`, `settings/` | Catalog and preferences |
 | `winres/`, `third_party/`, `scripts/` | Resources, patched wrapper, Windows integration check |

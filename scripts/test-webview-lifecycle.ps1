@@ -104,6 +104,20 @@ try {
  Post $hostWindow 0x10
  if (-not $process.WaitForExit(10000)) { throw 'Quit without GUI did not exit' }
  'PASS: Quit without GUI'
+ # Quit queued behind Open must still terminate during WebView initialization.
+ $process = Start-Process $Executable -PassThru
+ $hostWindow = [IntPtr]::Zero
+ Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray') -ne [IntPtr]::Zero } 'No host for initialization-quit check'
+ if ($process.HasExited) { throw 'App exited before initialization-quit check' }
+ $hostWindow = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray')
+ Post $hostWindow $show
+ Post $hostWindow 0x10
+ if (-not $process.WaitForExit(20000)) { throw 'Quit during WebView initialization did not exit' }
+ 'PASS: Quit during WebView initialization'
+} catch {
+ $message = $_.Exception.Message -replace '[\r\n]', ' '
+ Write-Output "::error::$message"
+ throw
 } finally {
  if (-not $process.HasExited -and $hostWindow -ne [IntPtr]::Zero) {
   [LifecycleWin]::PostMessage($hostWindow, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null

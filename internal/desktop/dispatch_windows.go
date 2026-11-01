@@ -1,4 +1,4 @@
-package tray
+package desktop
 
 import "sync"
 
@@ -9,7 +9,7 @@ type uiDispatch struct {
 
 // Dispatch posts to the window, so native modal loops also deliver callbacks.
 // PostThreadMessage wakeups can be consumed by those loops instead of Run.
-func (t *Tray) Dispatch(f func()) {
+func (t *Host) Dispatch(f func()) {
 	t.dispatch.mu.Lock()
 	t.dispatch.queue = append(t.dispatch.queue, f)
 	t.dispatch.mu.Unlock()
@@ -17,7 +17,7 @@ func (t *Tray) Dispatch(f func()) {
 	procPostMessage.Call(t.hwnd, wmDispatch, 0, 0)
 }
 
-func (t *Tray) runDispatched() {
+func (t *Host) runDispatched() {
 	t.dispatch.mu.Lock()
 	queue := t.dispatch.queue
 	t.dispatch.queue = nil
