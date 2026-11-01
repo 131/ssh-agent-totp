@@ -11,19 +11,43 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
   -ldflags "-H windowsgui -s -w -X main.version=<version>" -o ssh-agent-totp.exe .
 ```
 
-The tray owns an invisible native top-level window for dispatch, clipboard,
-timers and single-instance activation. Startup does not create a browser.
-Open/double-click creates the GUI on the same UI thread. Closing releases
-its WebView2 controller and owned COM references, then destroys only the GUI
-HWND; minimizing hides it. The native tray message loop runs throughout,
-including while the browser's processes exit and before the next Open.
-It drains the current WebView's binding completions on WM_APP and after
-native modal loops. Results targeting a closed view are discarded rather
-than delivered to a replacement window. The tick bridge subscribes once.
+## Native runtime and GUI session
+
+The defining behavior is the [application contract](TRAY.md#application-contract):
+the tray is permanent and the WebView is dynamic. The implementation has two
+resource lifetimes, even though both run on one UI thread in one process.
+
+| Owner/lifetime | Resources and responsibilities |
+| --- | --- |
+| Resident application | `App`, token/settings/startup/update services, single-instance mutex, native host HWND, clipboard ownership, tray icon/menu, clock and message loop |
+| Optional GUI session | WebView controller and owned COM references, GUI HWND/frame, HTML/JS document, bindings and pending UI completions |
+
+`main_windows.go` composes both. `internal/tray` provides the persistent host
+and native loop, notification-area behavior and attached GUI frame.
+`App` and its stores are constructed once; startup loads pinned tokens
+outside the UI thread, independently of page unlock.
+
+The host's native loop runs for the entire application lifetime. Open creates
+a WebView on that same thread and attaches its frame to the host; Close
+releases the browser and detaches/destroys the GUI without ending the loop.
+Minimize only hides it. Single-instance activation targets the permanent
+host, including when no GUI exists.
+
+The native loop drains the current WebView's private binding completions
+on WM_APP and after native modal loops. Replies and window actions retain
+the originating view identity and are ignored if that session has closed;
+they cannot address a new document after another Open. Backend operations
+and persisted application state are not owned by that document. The tick
+bridge registers once and evaluates JavaScript only while a session exists.
+
+Browser processes exit asynchronously after controller Close. The host keeps
+pumping messages during teardown and any subsequent Open; it does not wait
+for process exit with a blocked UI thread. Tests observe eventual exit of the
+closed browser tree, not an instantaneous disappearance inside Close.
 The dependency still initializes COM at package initialization, and DLLs
-can remain loaded. No IPC, process killing or DLL unloading is involved.
-Pinned tokens are loaded off-thread at startup, independently of the page.
-An unavailable agent leaves the shortcuts locked; opening the GUI can retry.
+can remain loaded. Neither IPC, process killing nor DLL unloading is needed.
+
+## WebView integration and lifecycle checks
 
 `third_party/go-webview2/` is a local lifecycle patch of the pinned dependency;
 its origin, license, COM ownership and added API are in
@@ -54,14 +78,14 @@ with a clear `tokens.crypt`: it is sealed at the first start.
 
 | Path | |
 |------|-|
-| `app.go`, `main_windows.go` | UI methods and the window |
+| `app.go`, `main_windows.go` | resident services and runtime/GUI composition |
 | `ui/` | page, style and script, embedded and inlined into one document |
 | `internal/i18n/messages.json` | every user-facing string, French and English, shared by Go and `ui/` |
 | `internal/totp` | RFC 6238 codes, import formats, `otpauth://` export |
 | `internal/tokens` | `tokens.crypt` ([TOKENS.md](TOKENS.md)), sealed through the agent |
 | `internal/clipboard` | copy kept out of the clipboard history |
 | `internal/update` | channels, download, `SHA256SUMS` and Authenticode checks |
-| `internal/tray` | notification area icon, single instance, borderless frame |
+| `internal/tray` | resident native host/loop, notification icon, activation and attached GUI frame |
 | `settings/` | `settings.yml` ([SETTINGS.md](SETTINGS.md)) |
 | `winres/` | icon and Windows manifest |
 | `third_party/go-webview2/` | pinned WebView2 wrapper with explicit browser teardown |

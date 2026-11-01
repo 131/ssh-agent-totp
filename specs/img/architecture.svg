@@ -7,7 +7,7 @@
 <g filter="url(#sh)"><rect class="box" x="36" y="80" width="200" height="86" rx="8"/></g><text class="t" x="50" y="104">SSH agent</text><text class="s" x="50" y="122">Pageant (0.75+) or OpenSSH agent</text><text class="s" x="50" y="138">your key never leaves it;</text><text class="s" x="50" y="154">it only signs a challenge</text>
 <g filter="url(#sh)"><rect class="hero" x="306" y="80" width="250" height="150" rx="8"/></g>
 <g transform="translate(320 94) scale(0.6875)"><rect width="32" height="32" rx="7" fill="#111"/><path d="M12.5 9V6.5a3.5 3.5 0 0 1 7 0V9" fill="none" stroke="#f5c518" stroke-width="2.4"/><circle cx="16" cy="19" r="9" fill="#f5c518"/><path d="M16 13.5V19l3.5 2.5" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round"/></g>
-<text class="t" x="350" y="110">ssh-agent-totp</text><text class="s" x="320" y="134">window + tray icon, WebView2</text>
+<text class="t" x="350" y="110">ssh-agent-totp</text><text class="s" x="320" y="128">resident tray + native runtime</text><text class="s" x="320" y="142">WebView2: Open → create, Close → release</text>
 <rect x="320" y="146" width="222" height="34" rx="5" fill="#fbf6dc" stroke="#e8d991"/><text class="t" x="332" y="167" font-size="11.5">ssh-agent-crypt</text><text class="s" x="430" y="167">seal / unseal</text>
 <text class="s" x="320" y="200">tokens in memory, RFC 6238 codes</text><text class="s" x="320" y="216">click = copy (out of clipboard history)</text>
 <path class="l" d="M236 123H306" marker-start="url(#arr)" marker-end="url(#arr)"/><text class="s" x="246" y="116">sign</text>

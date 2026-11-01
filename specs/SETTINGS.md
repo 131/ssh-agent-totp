@@ -77,8 +77,9 @@ that shortcut. Other startup entries are left untouched. Errors are shown
 and the toggle returns to its previous state.
 
 The shortcut uses the executable's directory as its working directory and
-launches the normal application at sign-in. Auto-update keeps the executable
-path, so the shortcut remains valid. Windows policy or Task Manager can
+launches the resident tray at sign-in, with no WebView until Open or
+double-click (see [the application contract](TRAY.md#application-contract)).
+Auto-update keeps the executable path, so the shortcut remains valid. Windows policy or Task Manager can
 override startup execution; this switch manages the shortcut registration.
 
 Dev builds redirect the Startup known-folder provider through an uncommitted

@@ -54,7 +54,9 @@ opening it again creates a fresh window. Minimizing only hides the window.
 A single click (or right-click) opens the tray menu; double-click opens the
 full window. The existing dial animates at one frame per
 second. A successful copy flashes a checkmark and posts a silent notification.
-Use Quit in the tray menu to exit. See the [tray compromise](specs/TRAY.md).
+Use Quit in the tray menu to exit. See the
+[resident-tray/dynamic-window contract](specs/TRAY.md#application-contract)
+and the [tray compromise](specs/TRAY.md#compromise).
 
 ## Your tokens
 

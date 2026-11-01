@@ -52,9 +52,14 @@ selector of the settings panel lists its keys.
 
 ## Update
 
-At startup (and on *Check for updates*), when the followed channel points to a
-newer version than the running one, a notification offers the update. The
-binary is downloaded next to the executable and installed only if:
+The GUI document requests the automatic check when it loads; *Check for
+updates* requests an explicit refresh. Tray-only startup does not create a
+browser or initiate this page-driven check. When the followed channel points
+to a newer version, the current GUI offers the update in a notification.
+The update service belongs to the resident application, so its settings and
+cached results outlive a GUI session (see
+[the application contract](TRAY.md#application-contract)).
+The binary is downloaded next to the executable and installed only if:
 
 - its SHA-256 matches the release `SHA256SUMS`;
 - Windows trusts its Authenticode signature (whole chain, revocation checked);
