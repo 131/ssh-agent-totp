@@ -90,6 +90,10 @@ func (r *Runtime) OpenWindow() {
 		}
 		return
 	}
+	if r.host.Closed() {
+		window.Close()
+		return
+	}
 	r.window = window
 	window.Show()
 }

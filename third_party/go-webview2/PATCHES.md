@@ -17,6 +17,9 @@ The app owns a persistent native message loop. This copy adds:
   during initialization. The resident runtime shows its completed session.
 - The environment-creation pump propagates WM_QUIT instead of reporting an
   interrupted initialization as successful.
+- Initialization HRESULTs use signed 32-bit decoding. Failed/null completions
+  return to the host; cancelled instances ignore late environment/controller
+  callbacks instead of dereferencing them or terminating the resident app.
 - Closed views reject late dispatch/evaluation and Close is idempotent.
 
 DLLs stay loaded. Closing the last controller lets WebView2 terminate its

@@ -127,7 +127,8 @@ try {
 } catch {
  $message = $_.Exception.Message -replace '[\r\n]', ' '
  if ($process.HasExited) { $message += "; exit code=$($process.ExitCode)" }
- $details = @(Get-Content $stderr -Tail 20 -ErrorAction SilentlyContinue) -join ' | '
+ $lines = @(Get-Content $stderr -ErrorAction SilentlyContinue)
+ $details = @($lines | Select-Object -First 15) -join ' | '
  if ($details) { $message += "; stderr=$details" }
  Write-Output "::error::$message"
  throw

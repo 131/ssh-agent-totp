@@ -42,3 +42,30 @@ func TestCloseFailurePreservesReferences(t *testing.T) {
 		t.Fatal("failed Close released references")
 	}
 }
+
+func TestInitializationFailureDoesNotDereferenceNullCallbacks(t *testing.T) {
+	for _, complete := range []func(*Chromium){
+		func(e *Chromium) { e.EnvironmentCompleted(0x80004005, nil) },
+		func(e *Chromium) { e.CreateCoreWebView2ControllerCompleted(0x80004005, nil) },
+		func(e *Chromium) { e.EnvironmentCompleted(0, nil) },
+		func(e *Chromium) { e.CreateCoreWebView2ControllerCompleted(0, nil) },
+	} {
+		e := &Chromium{}
+		complete(e)
+		if e.initErr == nil || e.inited == 0 {
+			t.Fatal("failed completion reported success or remained pending")
+		}
+	}
+}
+
+func TestCancelledInitializationIgnoresLateCallbacks(t *testing.T) {
+	e := &Chromium{}
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
+	}
+	e.EnvironmentCompleted(0, nil)
+	e.CreateCoreWebView2ControllerCompleted(0, nil)
+	if e.initErr != nil || e.controller != nil || e.environment != nil {
+		t.Fatal("cancelled instance accepted late callbacks")
+	}
+}
