@@ -12,6 +12,15 @@ becomes necessary, the full application is already the right interface: it
 shows codes, expiry rings, folders, search, and edit controls. Keep the tray
 plain rather than recreating that interface.
 
+## Window lifetime
+
+Startup creates only the native tray host. The first Open or double-click
+creates the WebView2 window in the same process, without IPC. Closing it
+releases the controller, destroys the GUI window and lets the browser
+processes exit normally. The next Open creates a new window. Minimizing
+only hides the current window. Quit exits the application in either state.
+DLLs may remain loaded; no browser processes are killed externally.
+
 ## Shortcuts
 
 - Pin/unpin individual tokens directly in the main window's edit mode.
@@ -27,8 +36,9 @@ plain rather than recreating that interface.
   through the same clipboard function as the main window. The code is
   never part of the menu label.
 - A successful copy posts a silent notification and flashes a checkmark
-  in the tray icon for three seconds. An error restores the full window
-  and reports the failure there.
+  in the tray icon for three seconds. An error restores the existing full
+  window and reports the failure there, or uses a native error dialog if
+  the GUI is closed.
 - Open and Quit follow the pinned entries. A single click or right-click
   on the tray icon opens this menu; double-click restores the full window.
 

@@ -47,9 +47,12 @@ Your SSH agent must be running with at least one key loaded.
 
 Copied codes stay out of the Windows clipboard history and cloud clipboard.
 
-The app lives in the notification area: closing the window (or Escape) keeps
-it there. A single click (or right-click) opens the tray menu; double-click
-brings back the full window. The existing dial animates at one frame per
+The app starts in the notification area without creating a WebView2 browser.
+Double-click or **Open** creates the full window on demand. Closing it
+(or Escape) releases the browser and its processes, leaving the tray active;
+opening it again creates a fresh window. Minimizing only hides the window.
+A single click (or right-click) opens the tray menu; double-click opens the
+full window. The existing dial animates at one frame per
 second. A successful copy flashes a checkmark and posts a silent notification.
 Use Quit in the tray menu to exit. See the [tray compromise](specs/TRAY.md).
 

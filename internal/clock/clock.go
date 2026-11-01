@@ -11,7 +11,8 @@ type Tick struct {
 	Percent float64
 }
 
-// Clock is owned by the UI thread; subscribers register once at startup.
+// Clock is owned by the UI thread; each subscriber registers once.
+// The optional GUI bridge subscribes once and skips ticks while closed.
 // The native timer calls Fire. There are no subscriber-specific timers.
 type Clock struct {
 	listeners []func(Tick)

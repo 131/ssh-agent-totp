@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,37 +35,16 @@ func main() {
 
 	update.Cleanup()
 	app := NewApp(openBrowser)
-	data := ""
-	if dir, err := os.UserCacheDir(); err == nil {
-		data = filepath.Join(dir, "ssh-agent-totp", "webview")
-	}
-	w := webview.NewWithOptions(webview.WebViewOptions{
-		Debug:     os.Getenv("SSH_AGENT_TOTP_DEBUG") != "",
-		AutoFocus: true,
-		DataPath:  data,
-		WindowOptions: webview.WindowOptions{
-			Title:  tray.WindowTitle,
-			Width:  tray.Scale(360),
-			Height: tray.Scale(560),
-			Center: true,
-			IconId: tray.IconID,
-		},
-	})
-	if w == nil {
-		os.Exit(1)
-	}
-	defer w.Destroy()
-
-	w.SetSize(int(tray.Scale(280)), int(tray.Scale(300)), webview.HintMin)
-	hwnd := uintptr(w.Window())
 	var ticks clock.Clock
-	icon := tray.Install(hwnd, &ticks)
-	icon.Borderless()
-	// Wake WebView2's own binding completions after a native modal loop.
-	icon.AfterModal = func() { w.Dispatch(func() {}) }
+	icon, err := tray.New(&ticks)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var w webview.WebView
+	changing := false
 
 	app.Copy = func(text string) error {
-		if err := clipboard.Copy(hwnd, text); err != nil {
+		if err := clipboard.Copy(icon.Window(), text); err != nil {
 			return err
 		}
 
@@ -80,20 +60,17 @@ func main() {
 				err = app.Copy(code)
 			}
 			if err != nil {
-				message, _ := json.Marshal(err.Error())
-				icon.Dispatch(func() { icon.Show(); w.Eval("window.notice(" + string(message) + ", true)") })
+				icon.Dispatch(func() {
+					if w == nil {
+						icon.Error(err)
+					} else {
+						icon.Show()
+						message, _ := json.Marshal(err.Error())
+						w.Eval("window.notice(" + string(message) + ", true)")
+					}
+				})
 			}
 		}()
-	}
-
-	app.Window = func(action string) error {
-		done := make(chan bool)
-		icon.Dispatch(func() { done <- icon.Frame(action) })
-		if !<-done {
-			return i18n.Errorf("err.window")
-		}
-
-		return nil
 	}
 
 	app.Relaunch = func(path string) error {
@@ -106,25 +83,107 @@ func main() {
 		icon.Dispatch(icon.Quit)
 		return nil
 	}
-	// Agent/file calls run outside the UI thread; HWND messages return their results
-	// even while a native popup or move/resize loop pumps window messages.
-	w.Bind("totp_call", func(id int, method string, args []json.RawMessage) {
-		go func() {
-			result, err := app.Handle(method, args)
-			message := ""
-			if err != nil {
-				message = err.Error()
-			}
-			payload, _ := json.Marshal(map[string]any{"id": id, "error": message, "result": result})
-			icon.Dispatch(func() { w.Eval("window.totpDone(" + string(payload) + ")") })
-		}()
-	})
-	// The GUI subscribes to the same 1 Hz tick as the native icons.
+	// Pinned shortcuts must not depend on the HTML unlock screen being opened.
+	// An unavailable agent leaves the menu locked until the GUI can retry.
+	go func() { _, _ = app.Handle("unlock", nil) }()
+
+	icon.Close = func() {
+		if w == nil || changing {
+			return
+		}
+		changing = true
+		defer func() { changing = false }()
+		old := w
+		w = nil
+		icon.Detach()
+		if err := old.Close(); err != nil {
+			w = old
+			icon.Attach(uintptr(old.Window()))
+			icon.Error(err)
+		}
+	}
+	icon.ProcessThread = func() {
+		if w != nil {
+			w.ProcessDispatch()
+		}
+	}
+	icon.AfterModal = icon.ProcessThread
+	// Subscribe once: recreating a browser must not add another tick listener.
 	ticks.Subscribe(func(tick clock.Tick) {
-		payload, _ := json.Marshal([]any{tick.Modulus, tick.Percent, tick.Now})
-		w.Eval("window.fireEvent?.('tick', ..." + string(payload) + ")")
+		if w != nil {
+			payload, _ := json.Marshal([]any{tick.Modulus, tick.Percent, tick.Now})
+			w.Eval("window.fireEvent?.('tick', ..." + string(payload) + ")")
+		}
 	})
-	app.Reload = func() { icon.Dispatch(func() { w.SetHtml(ui.Page(i18n.Current())) }) }
-	w.SetHtml(ui.Page(i18n.Current()))
-	w.Run()
+	app.Reload = func() {
+		icon.Dispatch(func() {
+			if w != nil {
+				w.SetHtml(ui.Page(i18n.Current()))
+			}
+		})
+	}
+
+	icon.Open = func() {
+		if w != nil || changing {
+			return
+		}
+		changing = true
+		defer func() { changing = false }()
+		data := ""
+		if dir, err := os.UserCacheDir(); err == nil {
+			data = filepath.Join(dir, "ssh-agent-totp", "webview")
+		}
+		w = webview.NewWithOptions(webview.WebViewOptions{
+			Debug:     os.Getenv("SSH_AGENT_TOTP_DEBUG") != "",
+			AutoFocus: true,
+			DataPath:  data,
+			WindowOptions: webview.WindowOptions{
+				Title:  tray.WindowTitle,
+				Width:  tray.Scale(360),
+				Height: tray.Scale(560),
+				Center: true,
+				IconId: tray.IconID,
+			},
+		})
+		if w == nil {
+			icon.Error(i18n.Errorf("err.window"))
+			return
+		}
+
+		w.SetSize(int(tray.Scale(280)), int(tray.Scale(300)), webview.HintMin)
+		icon.Attach(uintptr(w.Window()))
+		view := w
+		viewApp := *app
+		viewApp.Window = func(action string) error {
+			done := make(chan bool)
+			icon.Dispatch(func() { done <- (w == view && icon.Frame(action)) })
+			if !<-done {
+				return i18n.Errorf("err.window")
+			}
+
+			return nil
+		}
+
+		// Agent/file calls run outside the UI thread; HWND messages return their results
+		// even while a native popup or move/resize loop pumps window messages.
+		w.Bind("totp_call", func(id int, method string, args []json.RawMessage) {
+			go func() {
+				result, err := viewApp.Handle(method, args)
+				message := ""
+				if err != nil {
+					message = err.Error()
+				}
+				payload, _ := json.Marshal(map[string]any{"id": id, "error": message, "result": result})
+				icon.Dispatch(func() {
+					if w == view {
+						view.Eval("window.totpDone(" + string(payload) + ")")
+					}
+				})
+			}()
+		})
+
+		w.SetHtml(ui.Page(i18n.Current()))
+	}
+	icon.Run()
+	icon.Close()
 }

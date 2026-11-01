@@ -26,3 +26,11 @@ jobs:
       - run: go test ./...
       - run: go build -ldflags "-H windowsgui" -o ssh-agent-totp.exe .
         if: runner.os == 'Windows'
+
+      - name: Test patched WebView2 lifecycle
+        if: runner.os == 'Windows'
+        working-directory: third_party/go-webview2
+        run: go vet -unsafeptr=false ./...; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; go test ./...
+      - name: Verify browser process teardown and recreation
+        if: runner.os == 'Windows'
+        run: ./scripts/test-webview-lifecycle.ps1 -Executable ./ssh-agent-totp.exe

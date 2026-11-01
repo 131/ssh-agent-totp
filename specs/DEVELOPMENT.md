@@ -11,6 +11,35 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
   -ldflags "-H windowsgui -s -w -X main.version=<version>" -o ssh-agent-totp.exe .
 ```
 
+The tray owns an invisible native top-level window for dispatch, clipboard,
+timers and single-instance activation. Startup does not create a browser.
+Open/double-click creates the GUI on the same UI thread. Closing releases
+its WebView2 controller and owned COM references, then destroys only the GUI
+HWND; minimizing hides it. The native tray message loop runs throughout,
+including while the browser's processes exit and before the next Open.
+It drains the current WebView's binding completions on WM_APP and after
+native modal loops. Results targeting a closed view are discarded rather
+than delivered to a replacement window. The tick bridge subscribes once.
+The dependency still initializes COM at package initialization, and DLLs
+can remain loaded. No IPC, process killing or DLL unloading is involved.
+Pinned tokens are loaded off-thread at startup, independently of the page.
+An unavailable agent leaves the shortcuts locked; opening the GUI can retry.
+
+`third_party/go-webview2/` is a local lifecycle patch of the pinned dependency;
+its origin, license, COM ownership and added API are in
+[PATCHES.md](../third_party/go-webview2/PATCHES.md). Tests for that nested module
+run separately on Windows. An isolated Windows integration check verifies
+startup, process exit after Close, repeated creation, second-instance
+activation and rapid close/reopen:
+
+```powershell
+./scripts/test-webview-lifecycle.ps1 -Executable ./ssh-agent-totp.exe
+```
+
+Use a test build with an isolated mutex if another instance is running.
+The script uses a temporary APPDATA, an unavailable agent and disabled
+updates; it must not be run against the operator's installed executable.
+
 The window uses the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
 (shipped with Windows 10 and 11) through `github.com/jchv/go-webview2`, without
 cgo. It is borderless: the page draws the title bar, Go moves and resizes the
@@ -35,6 +64,8 @@ with a clear `tokens.crypt`: it is sealed at the first start.
 | `internal/tray` | notification area icon, single instance, borderless frame |
 | `settings/` | `settings.yml` ([SETTINGS.md](SETTINGS.md)) |
 | `winres/` | icon and Windows manifest |
+| `third_party/go-webview2/` | pinned WebView2 wrapper with explicit browser teardown |
+| `scripts/` | isolated Windows lifecycle integration check |
 | `specs/` | these documents |
 
 ## Translations
@@ -69,15 +100,15 @@ bitmap serves all pinned entries, and replaced bitmaps are released.
 ## Shared clock and GUI dispatch
 
 The composition root creates one `internal/clock.Clock`. Native icon/menu
-subscribers and the GUI bridge subscribe once; a single 1 Hz Win32 timer
-emits the tick. The GUI listens to the global `tick` event rather than
-installing an interval of its own. Timing and direction are defined in
+subscribers and the GUI bridge register once at startup; a single 1 Hz
+Win32 timer emits the tick. The bridge skips closed windows. The GUI listens
+to the global `tick` event rather than installing an interval of its own. Timing and direction are defined in
 [TRAY.md](TRAY.md#one-application-tick).
 
 Agent/file work stays off the GUI thread. Replies use a window-targeted
 dispatch message, so native popup and move/resize message loops still
-execute them. After a modal loop, WebView2's own binding completion queue is
-woken as well. A thread-only wakeup consumed by the native menu must not
+execute them. After a modal loop, the current WebView's binding completion
+queue is drained as well. A thread-only wakeup consumed by the native menu must not
 leave the list's refresh promise pending forever.
 
 ## Header controls

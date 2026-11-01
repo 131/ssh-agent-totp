@@ -108,6 +108,12 @@ type Tray struct {
 	Pinned         func() []tokens.PinnedItem
 	CopyPinned     func(int)
 	AfterModal     func()
+	Open           func()
+	Close          func()
+	ProcessThread  func()
+	window         uintptr
+	windowOriginal uintptr
+	frameCallback  uintptr
 	dispatch       uiDispatch
 	clock          *clock.Clock
 	instance       windows.Handle
@@ -122,7 +128,6 @@ type Tray struct {
 	data           notifyIconData
 	taskbarCreated uintptr
 	show           uintptr
-	quitting       bool
 	borderless     bool
 }
 
@@ -155,7 +160,7 @@ func ActivateExisting(waitPrevious bool) bool {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	class, _ := windows.UTF16PtrFromString("webview")
+	class, _ := windows.UTF16PtrFromString(hostClass)
 	title, _ := windows.UTF16PtrFromString(WindowTitle)
 	if hwnd, _, _ := procFindWindow.Call(uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title))); hwnd != 0 {
 		procPostMessage.Call(hwnd, registeredMessage("ssh-agent-totp-show"), 0, 0)
@@ -165,7 +170,6 @@ func ActivateExisting(waitPrevious bool) bool {
 
 // Quit ends the application, as Quitter does.
 func (t *Tray) Quit() {
-	t.quitting = true
 	procPostMessage.Call(t.hwnd, wmClose, 0, 0)
 }
 
@@ -214,8 +218,13 @@ func (t *Tray) add() {
 func (t *Tray) Show() { t.restore() }
 
 func (t *Tray) restore() {
-	procShowWindow.Call(t.hwnd, swRestore)
-	procSetForeground.Call(t.hwnd)
+	if t.Open != nil {
+		t.Open()
+	}
+	if t.window != 0 {
+		procShowWindow.Call(t.window, swRestore)
+		procSetForeground.Call(t.window)
+	}
 }
 
 func appendMenu(menu, flags, id uintptr, label string) {
@@ -270,8 +279,6 @@ func (t *Tray) menu() {
 
 func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	switch {
-	case msg == wmNcCalcSize && wparam != 0 && t.borderless:
-		return 0 // no title bar nor border: the UI draws them
 	case msg == wmDispatch:
 		t.runDispatched()
 		return 0
@@ -312,18 +319,16 @@ func (t *Tray) wndproc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	case msg == t.show && msg != 0:
 		t.restore()
 		return 0
-	case msg == wmClose && !t.quitting:
-		procShowWindow.Call(hwnd, swHide)
+	case msg == wmClose:
+		procDestroyWindow.Call(hwnd)
 		return 0
 	case msg == wmDestroy:
 		procKillTimer.Call(hwnd, clockTimerID)
 		procKillTimer.Call(hwnd, clickTimerID)
 		procNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&t.data)))
+		procPostQuitMessage.Call(0)
 	}
 	result, _, _ := procCallWindowProc.Call(t.original, hwnd, msg, wparam, lparam)
-	if msg == wmSize && wparam == sizeMinimized {
-		procShowWindow.Call(hwnd, swHide)
-	}
 	return result
 }
 

@@ -1,6 +1,7 @@
 package tray
 
 import (
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -46,32 +47,77 @@ var edges = map[string]uintptr{
 	"bottom-right": 17,
 }
 
+// Attach connects the lazily created GUI to the tray's independent host.
+func (t *Tray) Attach(hwnd uintptr) {
+	t.window = hwnd
+	if t.frameCallback == 0 {
+		t.frameCallback = syscall.NewCallback(t.frameProc)
+	}
+	t.windowOriginal, _, _ = procSetWindowLong.Call(hwnd, gwlpWndProc, t.frameCallback)
+	t.Borderless()
+}
+
+// Detach restores the GUI's original procedure before the browser destroys it.
+func (t *Tray) Detach() {
+	if t.window != 0 {
+		procSetWindowLong.Call(t.window, gwlpWndProc, t.windowOriginal)
+		t.window, t.windowOriginal = 0, 0
+		t.borderless = false
+	}
+}
+
+func (t *Tray) frameProc(hwnd, msg, wparam, lparam uintptr) uintptr {
+	switch msg {
+	case wmNcCalcSize:
+		if wparam != 0 && t.borderless {
+			return 0
+		}
+	case wmClose:
+		if t.Close != nil {
+			t.Close()
+		}
+		return 0
+	case wmExitSizeMove:
+		if t.AfterModal != nil {
+			t.AfterModal()
+		}
+	}
+	result, _, _ := procCallWindowProc.Call(t.windowOriginal, hwnd, msg, wparam, lparam)
+	if msg == wmSize && wparam == sizeMinimized {
+		procShowWindow.Call(hwnd, swHide)
+	}
+	return result
+}
+
 // Borderless removes the title bar; the window cannot be maximized.
 func (t *Tray) Borderless() {
 	t.borderless = true
-	style, _, _ := procGetWindowLong.Call(t.hwnd, gwlStyle)
-	procSetWindowLong.Call(t.hwnd, gwlStyle, style&^wsMaximizeBox)
+	style, _, _ := procGetWindowLong.Call(t.window, gwlStyle)
+	procSetWindowLong.Call(t.window, gwlStyle, style&^wsMaximizeBox)
 	// One pixel of DWM frame is enough for the shadow.
 	margins := [4]int32{0, 0, 0, 1}
-	procExtendFrame.Call(t.hwnd, uintptr(unsafe.Pointer(&margins)))
+	procExtendFrame.Call(t.window, uintptr(unsafe.Pointer(&margins)))
 	if procSetDwmAttr.Find() == nil {
 		corner := uint32(dwmCornerRound)
-		procSetDwmAttr.Call(t.hwnd, dwmCornerPreference, uintptr(unsafe.Pointer(&corner)), 4)
+		procSetDwmAttr.Call(t.window, dwmCornerPreference, uintptr(unsafe.Pointer(&corner)), 4)
 	}
-	procSetWindowPos.Call(t.hwnd, 0, 0, 0, 0, 0, swpFrameChanged|swpNoMove|swpNoSize|swpNoZOrder)
+	procSetWindowPos.Call(t.window, 0, 0, 0, 0, 0, swpFrameChanged|swpNoMove|swpNoSize|swpNoZOrder)
 }
 
 // Frame runs a title bar action of the UI, on the window thread: "drag",
 // "minimize", "close" or a resize edge ("left", "bottom-right"…).
 func (t *Tray) Frame(action string) bool {
+	if t.window == 0 {
+		return false
+	}
 	switch action {
 	case "drag":
 		procReleaseCapture.Call()
-		procPostMessage.Call(t.hwnd, wmNcLButtonDown, htCaption, 0)
+		procPostMessage.Call(t.window, wmNcLButtonDown, htCaption, 0)
 	case "minimize":
-		procShowWindow.Call(t.hwnd, swMinimize)
+		procShowWindow.Call(t.window, swMinimize)
 	case "close":
-		procPostMessage.Call(t.hwnd, wmClose, 0, 0)
+		procPostMessage.Call(t.window, wmClose, 0, 0)
 
 	default:
 		edge, ok := edges[action]
@@ -80,7 +126,7 @@ func (t *Tray) Frame(action string) bool {
 		}
 
 		procReleaseCapture.Call()
-		procPostMessage.Call(t.hwnd, wmNcLButtonDown, edge, 0)
+		procPostMessage.Call(t.window, wmNcLButtonDown, edge, 0)
 	}
 	return true
 }
