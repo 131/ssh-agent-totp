@@ -27,10 +27,18 @@ jobs:
       - run: go build -ldflags "-H windowsgui" -o ssh-agent-totp.exe .
         if: runner.os == 'Windows'
 
-      - name: Test patched WebView2 lifecycle
+      - name: Test pinned WebView2 dependency
         if: runner.os == 'Windows'
-        working-directory: third_party/go-webview2
-        run: go vet -unsafeptr=false ./...; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; go test ./...
+        run: |
+          $module = go list -m -f '{{.Dir}}' github.com/jchv/go-webview2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Push-Location $module
+          try {
+            go vet -unsafeptr=false ./...
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            go test ./...
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Pop-Location }
       - name: Ensure WebView2 runtime for native integration
         if: runner.os == 'Windows'
         run: ./scripts/ensure-webview2.ps1

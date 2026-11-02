@@ -11,21 +11,23 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
   -ldflags "-H windowsgui -s -w -X main.version=<version>" -o ssh-agent-totp.exe .
 ```
 
-On Windows, also test the patched nested module and browser lifecycle:
+On Windows, also test the pinned dependency and browser lifecycle:
 
 ```powershell
-Push-Location third_party/go-webview2
+$module = go list -m -f '{{.Dir}}' github.com/jchv/go-webview2
+Push-Location $module
 go vet -unsafeptr=false ./...; go test ./...
 Pop-Location
 ./scripts/test-webview-lifecycle.ps1 -Executable ./ssh-agent-totp.exe
 ```
 
 The integration script uses temporary APPDATA, an unavailable agent and
-updates disabled. Use an isolated-mutex test build when another instance is
-running; never target the installed executable. Unit tests use fake crypt,
+updates disabled. Use a test build with an isolated mutex **and host title** when another instance
+is running; never target the installed executable. Unit tests use fake crypt,
 not a real agent. For manual checks use a throwaway APPDATA; a clear token
 file is sealed on load. CI ensures the WebView2 runtime, verifies its installer signature if needed,
-then runs the nested tests, native session bridge and lifecycle check on Windows.
+then tests the downloaded, pinned dependency, native session bridge and lifecycle
+check on Windows.
 `SSH_AGENT_TOTP_NATIVE_TESTS=1 go test -run TestNativeSessionBridge .` opts into
 the real-GUI bridge test; other unit tests use disposable fake views.
 
@@ -51,10 +53,12 @@ the originating session, whose dispatch guard drops work after Close; the
 one-time tick bridge skips closed sessions. Frame callbacks share one native
 procedure and remove their HWND lookup on detach, without retaining old sessions. No UI thread waits for browser-process exit. DLLs/COM may remain loaded.
 
-`third_party/go-webview2/` is the pinned local lifecycle patch; provenance,
-license, COM ownership, Close/dispatch API and scoped vet setting are in
-[PATCHES.md](../third_party/go-webview2/PATCHES.md). The borderless WebView2
-window uses no cgo. `SSH_AGENT_TOTP_DEBUG=1` enables developer tools; runtime
+The WebView dependency is the explicitly maintained
+[131/go-webview2 fork](https://github.com/131/go-webview2), pinned by a remote
+replacement in `go.mod`. Its original module path preserves imports. The fork's
+[lifetime contract](https://github.com/131/go-webview2/blob/master/LIFECYCLE.md)
+defines COM ownership, Close/dispatch, threading, alternatives and scoped vet.
+The borderless WebView2 window uses no cgo. `SSH_AGENT_TOTP_DEBUG=1` enables developer tools; runtime
 data lives in the user cache directory under `ssh-agent-totp/webview`.
 
 ## Layout
@@ -69,7 +73,7 @@ data lives in the user cache directory under `ssh-agent-totp/webview`.
 | `internal/{clock,clipboard}` | Shared tick and private clipboard |
 | `internal/{update,startup}` | Verified updates and startup shortcut |
 | `internal/i18n`, `settings/` | Catalog and preferences |
-| `winres/`, `third_party/`, `scripts/` | Resources, patched wrapper, Windows integration check |
+| `winres/`, `scripts/` | Resources and Windows integration checks |
 
 ## Translations
 

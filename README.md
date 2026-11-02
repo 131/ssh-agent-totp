@@ -99,7 +99,8 @@ secrets are gone.
 - [OpenAI](https://openai.com) Codex, in collaboration
 - [ssh-agent-crypt](https://github.com/131/ssh-agent-crypt): secrets sealed by
   the SSH agent
-- [go-webview2](https://github.com/jchv/go-webview2): WebView2 window without cgo
+- [131/go-webview2](https://github.com/131/go-webview2): host-owned WebView2 lifetime,
+  based on [jchv/go-webview2](https://github.com/jchv/go-webview2), without cgo
 - Code signing, courtesy of Essilor International
 
 See [CREDITS.md](CREDITS.md).
