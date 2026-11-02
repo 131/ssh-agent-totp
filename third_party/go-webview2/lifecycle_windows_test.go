@@ -10,6 +10,7 @@ type fakeBrowser struct {
 	err           error
 }
 
+func (*fakeBrowser) Show() error                              { return nil }
 func (b *fakeBrowser) Close() error                           { b.closes++; return b.err }
 func (b *fakeBrowser) Eval(string)                            { b.evals++ }
 func (*fakeBrowser) Embed(uintptr) bool                       { return true }

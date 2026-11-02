@@ -69,3 +69,19 @@ func TestCancelledInitializationIgnoresLateCallbacks(t *testing.T) {
 		t.Fatal("cancelled instance accepted late callbacks")
 	}
 }
+
+func TestVisibilityUsesHRESULT(t *testing.T) {
+	var shown bool
+	controller := &ICoreWebView2Controller{vtbl: &_ICoreWebView2ControllerVtbl{PutIsVisible: ComProc(windows.NewCallback(func(this, value uintptr) uintptr {
+		shown = value == 1
+		windows.NewLazySystemDLL("kernel32.dll").NewProc("SetLastError").Call(123)
+		return 0
+	}))}}
+	if err := controller.PutIsVisible(true); err != nil || !shown {
+		t.Fatalf("successful visibility call: %v", err)
+	}
+	controller.vtbl.PutIsVisible = ComProc(windows.NewCallback(func(this, value uintptr) uintptr { return 0x80004005 }))
+	if controller.PutIsVisible(true) == nil {
+		t.Fatal("visibility HRESULT failure ignored")
+	}
+}

@@ -8,12 +8,22 @@ using System.Runtime.InteropServices;
 public class LifecycleWin {
  public delegate bool EnumProc(IntPtr hwnd, IntPtr data);
  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr data);
+ [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr data);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr hwnd, StringBuilder name, int size);
  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern uint RegisterWindowMessage(string text);
  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hwnd);
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
+ public static bool VisibleBrowser(IntPtr parent) {
+  bool visible = false;
+  EnumChildWindows(parent, (hwnd, data) => {
+   var name = new StringBuilder(256); GetClassName(hwnd, name, name.Capacity);
+   if (name.ToString().StartsWith("Chrome_WidgetWin_") && IsWindowVisible(hwnd)) visible = true;
+   return true;
+  }, IntPtr.Zero);
+  return visible;
+ }
  public static IntPtr Find(uint pid, string cls) {
   IntPtr found = IntPtr.Zero;
   EnumWindows((hwnd, data) => {
@@ -48,7 +58,7 @@ function Browser-Tree([int]$Owner) {
 # controller/frame are still being constructed and is not yet an open session.
 function Visible-Gui([int]$Owner) {
  $window = [LifecycleWin]::Find($Owner, 'webview')
- if ($window -ne [IntPtr]::Zero -and [LifecycleWin]::IsWindowVisible($window)) { return $window }
+ if ($window -ne [IntPtr]::Zero -and [LifecycleWin]::IsWindowVisible($window) -and [LifecycleWin]::VisibleBrowser($window)) { return $window }
  return [IntPtr]::Zero
 }
 function Post([IntPtr]$Window, [uint32]$Message) {

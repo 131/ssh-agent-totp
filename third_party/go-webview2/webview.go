@@ -37,6 +37,7 @@ func setWindowContext(wnd uintptr, data interface{}) {
 }
 
 type browser interface {
+	Show() error
 	Close() error
 	Embed(hwnd uintptr) bool
 	Resize()
@@ -115,6 +116,14 @@ func NewWithOptions(options WebViewOptions) WebView {
 		return nil
 	}
 
+	// The controller can start logically visible under a hidden HWND. Hide it
+	// explicitly so publication performs a real false-to-true transition.
+	if options.WindowOptions.Hidden {
+		if err := chromium.Hide(); err != nil {
+			w.Close()
+			return nil
+		}
+	}
 	settings, err := chromium.GetSettings()
 	if err != nil {
 		log.Fatal(err)
@@ -532,4 +541,11 @@ func (w *webview) ProcessDispatch() {
 		}
 		f()
 	}
+}
+
+func (w *webview) Show() error {
+	if w.isClosed() {
+		return errors.New("webview is closed")
+	}
+	return w.browser.Show()
 }

@@ -13,8 +13,9 @@ The app owns a persistent native message loop. This copy adds:
   and after native modal loops.
 - Balanced COM ownership: GetCoreWebView2 already returns a reference, and
   the settings reference is released after configuration.
-- `WindowOptions.Hidden` creates the GUI without displaying an unowned window
-  during initialization. The resident runtime shows its completed session.
+- `WindowOptions.Hidden` hides both HWND and controller during initialization.
+  Publication shows the parent frame, then explicitly reveals the controller
+  through `WebView.Show()`; showing the parent alone leaves a blank surface.
 - The environment-creation pump propagates WM_QUIT instead of reporting an
   interrupted initialization as successful.
 - Initialization HRESULTs use signed 32-bit decoding. Failed/null completions

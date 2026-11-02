@@ -4,8 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/131/ssh-agent-totp/internal/clock"
 	"github.com/131/ssh-agent-totp/internal/desktop"
@@ -61,6 +63,24 @@ func TestNativeSessionBridge(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
+	if err := session.Show(); err != nil {
+		t.Fatal(err)
+	}
+	var visible bool
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	callback := windows.NewCallback(func(hwnd, data uintptr) uintptr {
+		var name [256]uint16
+		user32.NewProc("GetClassNameW").Call(hwnd, uintptr(unsafe.Pointer(&name[0])), 256)
+		if strings.HasPrefix(windows.UTF16ToString(name[:]), "Chrome_WidgetWin_") {
+			shown, _, _ := user32.NewProc("IsWindowVisible").Call(hwnd)
+			if shown != 0 {
+				visible = true
+			}
+		}
+		return 1
+	})
+	user32.NewProc("EnumChildWindows").Call(uintptr(session.view.Window()), callback, 0)
+
 	host.ProcessThread = session.Drain
 	replies := map[string]string{}
 	if err := session.view.Bind("test_probe", func(kind, value string) {
@@ -83,6 +103,11 @@ func TestNativeSessionBridge(t *testing.T) {
 	timeout := time.AfterFunc(30*time.Second, func() { host.Dispatch(host.Quit) })
 	defer timeout.Stop()
 	host.Run()
+	visible = false
+	user32.NewProc("EnumChildWindows").Call(uintptr(session.view.Window()), callback, 0)
+	if !visible {
+		t.Fatal("browser remains hidden after event loop and bridge completions")
+	}
 	if replies["backend"] != version || replies["binding"] != "ok" {
 		t.Fatalf("native bridge replies = %v; need backend version and binding completion", replies)
 	}

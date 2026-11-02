@@ -78,7 +78,9 @@ func (r *Runtime) OpenWindow() {
 		return
 	}
 	if r.window != nil {
-		r.window.Show()
+		if err := r.window.Show(); err != nil {
+			r.host.Error(err)
+		}
 		return
 	}
 	r.changing = true
@@ -95,7 +97,9 @@ func (r *Runtime) OpenWindow() {
 		return
 	}
 	r.window = window
-	window.Show()
+	if err := window.Show(); err != nil {
+		r.host.Error(err)
+	}
 }
 
 func (r *Runtime) CloseWindow() {

@@ -39,7 +39,9 @@ provides the persistent HWND/message loop/dispatch/timer and native GUI frame;
 `internal/tray` handles only the notification icon and shortcut menu.
 `WindowSession` (`window_session_windows.go`) owns its WebView, frame, bridge
 and closed-state guard. Open constructs it hidden, then publishes/shows the
-completed session. Close detaches/destroys only that GUI and releases its
+completed session: parent HWND first, then the explicitly hidden WebView2
+controller. Tests check browser-child visibility, not just the outer frame.
+Close detaches/destroys only that GUI and releases its
 browser references; a failed Close restores the same session for retry.
 
 Agent/file work runs off-thread; results return through HWND dispatch so

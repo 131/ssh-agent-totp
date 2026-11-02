@@ -41,6 +41,9 @@ type WebView interface {
 	// Destroy destroys a webview and closes the native window.
 	Destroy()
 
+	// Show makes the embedded browser visible after its parent was created hidden.
+	Show() error
+
 	// Close releases the browser and destroys its window without quitting the
 	// host's message loop. Call on the UI thread; safe to call more than once.
 	Close() error

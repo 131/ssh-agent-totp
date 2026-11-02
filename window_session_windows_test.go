@@ -14,9 +14,9 @@ import (
 
 type fakeSessionView struct {
 	webview.WebView
-	hwnd                        uintptr
-	err                         error
-	closes, evals, html, drains int
+	hwnd                               uintptr
+	err                                error
+	closes, evals, html, drains, shows int
 }
 
 func (v *fakeSessionView) Close() error {
@@ -27,6 +27,7 @@ func (v *fakeSessionView) Close() error {
 	windows.NewLazySystemDLL("user32.dll").NewProc("DestroyWindow").Call(v.hwnd)
 	return nil
 }
+func (v *fakeSessionView) Show() error      { v.shows++; return nil }
 func (v *fakeSessionView) Eval(string)      { v.evals++ }
 func (v *fakeSessionView) SetHtml(string)   { v.html++ }
 func (v *fakeSessionView) ProcessDispatch() { v.drains++ }
@@ -93,7 +94,7 @@ func TestClosedSessionDropsWorkWithoutTouchingReplacement(t *testing.T) {
 	}
 	host.Dispatch(host.Quit)
 	host.Run()
-	if oldCalls != 0 || newCalls != 1 || view.closes != 1 || view.evals != 0 || view.html != 0 || view.drains != 0 {
+	if oldCalls != 0 || newCalls != 1 || view.closes != 1 || view.evals != 0 || view.html != 0 || view.drains != 0 || view.shows != 0 {
 		t.Fatalf("stale session work: old=%d new=%d view=%+v", oldCalls, newCalls, view)
 	}
 }

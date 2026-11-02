@@ -91,10 +91,14 @@ func (s *WindowSession) Close() error {
 	return nil
 }
 
-func (s *WindowSession) Show() {
-	if !s.closed {
-		s.frame.Show()
+func (s *WindowSession) Show() error {
+	if s.closed {
+		return nil
 	}
+	// Showing the parent HWND does not change the visibility of a controller
+	// created under a hidden parent. Publish the browser as well as its frame.
+	s.frame.Show()
+	return s.view.Show()
 }
 func (s *WindowSession) Drain() {
 	if !s.closed {
