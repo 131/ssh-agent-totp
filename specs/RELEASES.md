@@ -16,8 +16,10 @@ The `release` workflow runs tests, then [GoReleaser](../.goreleaser.yaml) builds
 `ssh-agent-totp-windows-amd64.exe`, signs via `SIGNING_SERVER` and publishes it
 with `SHA256SUMS`; `wails3 updater manifest` then attaches its
 [Wails update manifest](https://github.com/wailsapp/wails/blob/v3.1.0/docs/mpress/content/reference/update-manifest.md)
-`update.json` (SHA-512 digest, absolute asset URL). The GitHub `production`
-environment protects signing credentials; it is not a release channel.
+`update.json` (SHA-512 digest, absolute asset URL). The manifest is generated
+from the asset downloaded back from the published release, so its name, size and digest describe the distributed signed bytes.
+The GitHub `production` environment protects signing credentials; it is not
+a release channel.
 
 ## Channels
 
@@ -32,8 +34,8 @@ curl -fsSL https://github.com/131/ssh-agent-totp/releases/download/vX.Y.Z/update
 
 The app reads
 `https://raw.githubusercontent.com/<owner>/<repo>/HEAD/updates/<channel>.json`
-through the Wails updater `endpoint` provider. A missing manifest means
-nothing to install.
+through the Wails updater `endpoint` provider. A missing or invalid manifest
+is a check error, shown in settings; no update is installed.
 
 Versions up to v0.2.0 still follow the root [`manifest.json`](../manifest.json)
 (channel → tag) and `SHA256SUMS`: keep promoting there too until no such
@@ -49,7 +51,12 @@ the executable beside the running one; it is accepted only when:
 
 - the manifest carries a digest and the download matches it;
 - Windows trusts the Authenticode chain, including revocation;
-- the signer matches the running executable's.
+- the signing certificate's encoded subject matches the running executable's.
+
+Checks and update preference changes are serialized with installation. One
+install transaction checks the requested tag, downloads/verifies that release
+and starts the restart helper; another channel check cannot replace its pending
+release. A failed verification does not restart and can be retried.
 
 On restart, a Wails helper process waits for the application to exit, swaps
 the executable and starts it again. Its directory must be writable. Downgrades

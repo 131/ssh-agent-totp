@@ -16,9 +16,6 @@ import (
 
 const WindowTitle = "ssh-agent-totp"
 
-// doubleClick separates a single click (menu) from a double click (GUI).
-const doubleClick = 500 * time.Millisecond
-
 //go:embed frames/*.png
 var frames embed.FS
 
@@ -42,45 +39,26 @@ type Tray struct {
 	mu         sync.Mutex
 	pins       []*application.MenuItem
 	flashUntil time.Time
-	click      *time.Timer
-	double     bool
+	clicks     clickHandler
 }
 
 func Install(app *application.App, ticks *clock.Clock) *Tray {
 	t := &Tray{menu: app.Menu.New()}
 	t.icon = app.SystemTray.New().SetIcon(frame("00")).SetMenu(t.menu)
 	t.icon.SetTooltip(WindowTitle)
-	t.icon.OnClick(t.clicked)
-	t.icon.OnDoubleClick(t.doubleClicked)
-	t.icon.OnRightClick(t.showMenu)
+	t.clicks = clickHandler{
+		delay: doubleClickDelay(), post: application.InvokeAsync,
+		menu: t.showMenu, open: func() {
+			if t.Open != nil {
+				t.Open()
+			}
+		},
+	}
+	t.icon.OnClick(t.clicks.singleClick)
+	t.icon.OnDoubleClick(t.clicks.doubleClick)
+	t.icon.OnRightClick(t.clicks.rightClick)
 	ticks.Subscribe(t.spin)
 	return t
-}
-
-func (t *Tray) clicked() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	// The button release that follows a double click is not a new click.
-	if t.double {
-		t.double = false
-		return
-	}
-	if t.click != nil {
-		t.click.Stop()
-	}
-	t.click = time.AfterFunc(doubleClick, t.showMenu)
-}
-
-func (t *Tray) doubleClicked() {
-	t.mu.Lock()
-	if t.click != nil {
-		t.click.Stop()
-	}
-	t.double = true
-	t.mu.Unlock()
-	if t.Open != nil {
-		t.Open()
-	}
 }
 
 // showMenu rebuilds the flat menu: pinned names (no codes), Open, Quit.

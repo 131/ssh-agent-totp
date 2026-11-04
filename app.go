@@ -290,11 +290,7 @@ func (a *App) Handle(method string, args []json.RawMessage) (any, error) {
 			return nil, err
 		}
 
-		if err := a.Updater.Install(tag); err != nil {
-			return nil, err
-		}
-
-		return nil, a.Updater.Restart()
+		return nil, a.Updater.Install(tag)
 
 	case "update_open":
 		// Development builds cannot update: open the release page of the channel.

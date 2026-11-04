@@ -24,7 +24,8 @@ updates disabled. Stop any other instance of the same build first (Wails'
 single-instance lock is per application); never target the installed executable. Unit tests use fake crypt,
 not a real agent. For manual checks use a throwaway APPDATA; a clear token
 file is sealed on load. CI ensures the WebView2 runtime, verifies its installer signature if needed,
-then runs the lifecycle check on Windows.
+then runs the lifecycle check on Windows, including native minimize/hide and
+reopening the same window/browser session.
 
 ## Native runtime and GUI session
 
@@ -45,7 +46,9 @@ The page is inline HTML (no asset server files, no generated bindings).
 config is ready; `RawMessageHandler` hands it to the session, which runs
 `App.Handle` off-thread and replies through `ExecJS`. Replies are dropped after
 Close. Window actions (drag, resize edges, minimize, close) map to Wails'
-frameless messages. Agent/file work never runs on the UI thread.
+frameless messages for drag/resize; minimize hides the session and Close
+destroys it. Native minimize events also hide the session. Agent/file work
+never runs on the UI thread.
 
 `SSH_AGENT_TOTP_DEBUG=1` enables developer tools; WebView2 data lives in the
 user cache directory under `ssh-agent-totp/webview`. Known Wails v3.1
@@ -60,7 +63,7 @@ with code 1 (the lifecycle script reports it as a warning).
 | `runtime.go`, `window_session.go` | Resident ownership and disposable GUI/bridge (Wails) |
 | `ui/` | Embedded HTML, CSS and script, inlined into one page |
 | `internal/{tokens,totp}` | Sealed store, RFC 6238, import/export |
-| `internal/tray` | Tray icon frames and pinned menu |
+| `internal/tray` | Tray icon frames, pinned menu and cancellable click dispatch |
 | `internal/{clock,clipboard}` | Shared tick and private clipboard |
 | `internal/{update,startup}` | Wails updater (channels, Authenticode) and startup shortcut |
 | `internal/i18n`, `settings/` | Catalog and preferences |
@@ -98,3 +101,16 @@ loops must continue processing replies and binding completions.
 
 Logo/brand then settings wrench are left; Add/Edit precede window controls on
 the right. Pin/unpin uses one glyph and changes only its pressed style.
+
+## Concurrency regression tests
+
+`internal/tray/click_test.go` holds the posted UI callbacks to verify that a
+later double/right/new single click cancels a stale menu request. No native
+menu is opened by these tests. `internal/update/update_test.go` holds signature
+verification and restart while a channel change waits, and checks that a
+verification failure never restarts and leaves the transaction retryable.
+
+The updater serializes checks, preference changes and the complete install
+transaction (tag check, download, digest/signature verification, restart).
+`App.Handle("update_install")` calls this transaction once; it does not perform
+an independently interleavable restart.

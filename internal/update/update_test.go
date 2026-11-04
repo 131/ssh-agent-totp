@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/updater"
 
@@ -19,9 +21,14 @@ import (
 )
 
 // host is the Wails application seen by the updater: no window, no quit.
-type host struct{}
+type host struct{ available func() }
 
-func (host) Emit(string, ...any) bool                              { return true }
+func (h host) Emit(event string, _ ...any) bool {
+	if event == updater.EventUpdateAvailable && h.available != nil {
+		h.available()
+	}
+	return true
+}
 func (host) OnEvent(string, func(any)) func()                      { return func() {} }
 func (host) OpenWindow(updater.WindowOptions) updater.WindowHandle { return nil }
 func (host) Quit()                                                 {}
@@ -54,7 +61,7 @@ func releaseServer(t *testing.T, version string, asset, sum []byte) (*httptest.S
 }
 
 func testUpdater(t *testing.T, server *httptest.Server, current, exe string, verify func(string, string) error) *Updater {
-	u := &Updater{Wails: updater.New(host{}), Raw: server.URL, Current: current,
+	u := &Updater{restart: func() error { return nil }, Wails: updater.New(host{}), Raw: server.URL, Current: current,
 		Settings: &settings.Store{Path: filepath.Join(t.TempDir(), "settings.yml")}, Verify: verify,
 		Executable: func() (string, error) { return exe, nil }}
 	if err := u.Init(); err != nil {
@@ -182,5 +189,143 @@ func TestUpdateSettings(t *testing.T) {
 	u.Settings.Update(func(s *settings.Settings) { s.Update.Upstream = "https://github.com/131/ssh-agent-totp.git/" })
 	if release, err := u.Check(); err != nil || !release.Available || release.URL != "https://github.com/131/ssh-agent-totp/releases/tag/v1.2.0" {
 		t.Fatalf("upstream with .git: %+v %v", release, err)
+	}
+}
+
+func TestUpdateInstallSerializesChannelThroughRestart(t *testing.T) {
+	server, _ := releaseServer(t, "1.2.0", []byte("production binary"), nil)
+	verified, allowVerify := make(chan struct{}), make(chan struct{})
+	restarting, allowRestart := make(chan struct{}), make(chan struct{})
+	u := testUpdater(t, server, "v1.0.0", "current.exe", func(candidate, _ string) error {
+		data, err := os.ReadFile(candidate)
+		if err != nil || string(data) != "production binary" {
+			return fmt.Errorf("wrong download: %q, %v", data, err)
+		}
+		close(verified)
+		<-allowVerify
+		return nil
+	})
+	u.restart = func() error { close(restarting); <-allowRestart; return nil }
+	// Always release workers on assertion failure, too.
+	defer func() {
+		select {
+		case <-allowVerify:
+		default:
+			close(allowVerify)
+		}
+		select {
+		case <-allowRestart:
+		default:
+			close(allowRestart)
+		}
+	}()
+	installed := make(chan error, 1)
+	go func() { installed <- u.Install("v1.2.0") }()
+	waitUpdate(t, verified, "signature verification")
+	changed := make(chan error, 1)
+	started := make(chan struct{})
+	go func() { close(started); _, err := u.SetChannel("beta"); changed <- err }()
+	waitUpdate(t, started, "channel request")
+	stillWaiting := func(stage string) {
+		t.Helper()
+		select {
+		case err := <-changed:
+			t.Fatalf("channel changed during %s: %v", stage, err)
+		case <-time.After(30 * time.Millisecond):
+		}
+		current, err := u.Settings.Load()
+		if err != nil || current.Update.Channel != "production" {
+			t.Fatalf("channel during %s: %+v, %v", stage, current.Update, err)
+		}
+	}
+	stillWaiting("verification")
+	close(allowVerify)
+	waitUpdate(t, restarting, "restart")
+	stillWaiting("restart")
+	close(allowRestart)
+	if err := <-installed; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-changed; err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := u.Settings.Load(); err != nil || saved.Update.Channel != "beta" {
+		t.Fatalf("channel request not applied after transaction: %+v, %v", saved.Update, err)
+	}
+}
+
+func waitUpdate(t *testing.T, signal <-chan struct{}, stage string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", stage)
+	}
+}
+
+func TestUpdateVerificationFailureDoesNotRestart(t *testing.T) {
+	server, _ := releaseServer(t, "1.2.0", []byte("binary"), nil)
+	rejected := errors.New("signer rejected")
+	u := testUpdater(t, server, "v1.0.0", "current.exe", func(string, string) error { return rejected })
+	restarts := 0
+	u.restart = func() error { restarts++; return nil }
+	if err := u.Install("v1.2.0"); !errors.Is(err, rejected) || restarts != 0 {
+		t.Fatalf("rejected signature: %v, restarts=%d", err, restarts)
+	}
+	// The failed transaction releases the lock and can be retried.
+	u.Verify = func(string, string) error { return nil }
+	if err := u.Install("v1.2.0"); err != nil || restarts != 1 {
+		t.Fatalf("retry: %v, restarts=%d", err, restarts)
+	}
+}
+
+func TestUpdateInstallKeepsTheCheckedRelease(t *testing.T) {
+	mux := http.NewServeMux()
+	for channel, version := range map[string]string{"production": "1.2.0", "beta": "2.0.0-beta.1"} {
+		digest := sha256.Sum256([]byte(version))
+		manifest := fmt.Sprintf(`{"schemaVersion":1,"version":%q,"artifacts":[{"url":"../releases/%s.exe","digestAlgo":"sha256","digest":%q}]}`,
+			version, version, base64.StdEncoding.EncodeToString(digest[:]))
+		mux.HandleFunc("/131/ssh-agent-totp/HEAD/updates/"+channel+".json", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, manifest) })
+		mux.HandleFunc("/131/ssh-agent-totp/HEAD/releases/"+version+".exe", func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, version) })
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	u := &Updater{Raw: server.URL, Current: "v1.0.0", Settings: &settings.Store{Path: filepath.Join(t.TempDir(), "settings.yml")},
+		Executable: func() (string, error) { return "current.exe", nil }, restart: func() error { return nil },
+		Verify: func(candidate, _ string) error {
+			data, err := os.ReadFile(candidate)
+			if err != nil || string(data) != "1.2.0" {
+				return fmt.Errorf("requested v1.2.0, downloaded %q (%v)", data, err)
+			}
+			return nil
+		}}
+	started, changed := make(chan struct{}), make(chan error, 1)
+	var once sync.Once
+	u.Wails = updater.New(host{available: func() {
+		// Force a channel request after Wails has selected production but before
+		// the install caller has received Check's result and started downloading.
+		once.Do(func() {
+			go func() { close(started); _, err := u.SetChannel("beta"); changed <- err }()
+			waitUpdate(t, started, "concurrent channel request")
+			select {
+			case err := <-changed:
+				t.Fatalf("pending release replaced before download: %v", err)
+			case <-time.After(30 * time.Millisecond):
+			}
+		})
+	}})
+	if err := u.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.Install("v1.2.0"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-changed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("channel request was not released")
 	}
 }

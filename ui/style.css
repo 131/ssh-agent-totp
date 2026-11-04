@@ -4,7 +4,6 @@ html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
 body{display:flex;flex-direction:column;user-select:none;-webkit-user-select:none;cursor:default}
 input,textarea,#path{user-select:text;-webkit-user-select:text}
 /* borderless window: custom title bar, edges resize (app.js) */
-body{border:1px solid #c9d3c7}
 header{display:flex;align-items:center;gap:6px;height:32px;padding:0 0 0 10px;border-bottom:1px solid var(--line);background:#fff;flex:none}
 .brand{display:flex;align-items:center;gap:6px;color:#1b4332;font-weight:800;font-size:13px;letter-spacing:-.3px;white-space:nowrap}
 .brand svg{width:16px;height:16px;flex:none}

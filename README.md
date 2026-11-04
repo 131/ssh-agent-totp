@@ -47,7 +47,9 @@ Your SSH agent must be running with at least one key loaded.
 
 Copied codes stay out of the Windows clipboard history and cloud clipboard.
 
-The app starts in the notification area without creating a WebView2 browser.
+The borderless window uses a custom header, without an outer border, Windows
+shadow or rounded corners. The app starts in the notification area without
+creating a WebView2 browser.
 Double-click or **Open** creates the full window on demand. Closing it
 (or Escape) releases the browser and its processes, leaving the tray active;
 opening it again creates a fresh window. Minimizing only hides the window.

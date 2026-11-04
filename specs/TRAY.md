@@ -12,8 +12,11 @@ and UI thread; there is no IPC.
 | Launch, including sign-in | Absent; no browser processes | Starts |
 | Open / double-click / second launch | Creates a session or restores the existing one | Keeps running; a second process exits |
 | Close / native X / Escape at list root | Destroys its window and releases the browser | Keeps running |
-| Minimize | Hides the session, retaining its browser | Keeps running |
+| Minimize button / native minimize | Hides the session, retaining its browser | Keeps running |
 | Quit | Releases any remaining session | Removes icon and exits |
+
+The window is borderless: custom header and resize edges, without a CSS
+outline or Windows frame decorations (shadow/rounded corners).
 
 Close releases the window and drops queued replies. Browser
 processes exit asynchronously; DLLs may stay loaded. No process is killed
@@ -51,6 +54,11 @@ The main window displays codes, folders and edit controls.
   function as the GUI, outside clipboard history/cloud sync.
 - Success flashes a checkmark for three seconds. Errors restore an existing GUI or use a native dialog when closed.
 - Single/right-click opens the menu; double-click creates/restores the GUI.
+  The single-click delay follows Windows' configured double-click interval
+  (500 ms fallback on other platforms). Double-click, right-click and a newer
+  single click invalidate earlier delayed menu requests, even after their timer
+  has posted to the UI queue. The release after a double-click is ignored.
+  Menu construction and bitmap refresh both run on the UI thread.
 
 ## Icon
 

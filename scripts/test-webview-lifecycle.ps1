@@ -114,6 +114,19 @@ try {
  $gui = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp')
  Wait-For { @(Browser-Tree $process.Id).Count -gt 0 } 'Second launch did not start browser'
  'PASS: second launch recreates GUI in the original process'
+ # System minimize must hide, not destroy, the existing GUI/browser session.
+ $retainedGui = $gui
+ $retainedBrowsers = @(Browser-Tree $process.Id)
+ if (-not [LifecycleWin]::PostMessage($gui, 0x112, [IntPtr]0xF020, [IntPtr]::Zero)) { throw 'Native minimize failed' }
+ Wait-For { -not [LifecycleWin]::IsWindowVisible($retainedGui) } 'Minimize did not hide GUI'
+ if (-not [LifecycleWin]::IsWindow($retainedGui)) { throw 'Minimize destroyed GUI' }
+ if (@(Get-Process -Id $retainedBrowsers -ErrorAction SilentlyContinue).Count -ne $retainedBrowsers.Count) { throw 'Minimize destroyed browser processes' }
+ Show-Gui
+ Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'Hidden GUI did not reopen'
+ $gui = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp')
+ if ($gui -ne $retainedGui) { throw 'Reopen replaced the minimized session' }
+ if (@(Get-Process -Id $retainedBrowsers -ErrorAction SilentlyContinue).Count -ne $retainedBrowsers.Count) { throw 'Reopen replaced browser processes' }
+ 'PASS: native minimize hides GUI and reopen retains its window/browser'
  # Immediate close/open must not crash or terminate the host's queue.
  Post $gui 0x10
  Show-Gui

@@ -37,9 +37,12 @@ func NewWindowSession(app *App, wails *application.App, closed func(*WindowSessi
 	s.view = wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: tray.WindowTitle, Width: 360, Height: 560, MinWidth: 280, MinHeight: 300,
 		Frameless: true, Hidden: true, InitialPosition: application.WindowCentered,
+		Windows:         application.WindowsWindow{DisableFramelessWindowDecorations: true},
 		DevToolsEnabled: os.Getenv("SSH_AGENT_TOTP_DEBUG") != "",
 		HTML:            ui.Page(i18n.Current()),
 	})
+	// Native minimize (e.g. a system shortcut) follows the same tray contract.
+	s.view.OnWindowEvent(events.Common.WindowMinimise, func(*application.WindowEvent) { s.view.Hide() })
 	s.view.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 		s.closed.Store(true)
 		closed(s)
@@ -82,7 +85,7 @@ func (s *WindowSession) WindowAction(action string) error {
 	case "drag":
 		application.InvokeSync(func() { s.view.HandleMessage("wails:drag") })
 	case "minimize":
-		s.view.Minimise()
+		s.view.Hide()
 	case "close":
 		s.view.Close()
 	default:

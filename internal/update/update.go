@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/wailsapp/wails/v3/pkg/updater"
@@ -26,6 +27,11 @@ var Channels = []string{settings.DefaultChannel, "beta"}
 // digest from the manifest) and Verify accepts it (on Windows: trusted
 // Authenticode signature from the signer of the running executable).
 type Updater struct {
+	// One transaction owns settings, the pending release and restart.
+	mu sync.Mutex
+	// restart uses the Wails helper; tests replace it without quitting.
+	restart func() error
+
 	Wails *updater.Updater
 	// Raw serves the repository files (the channel manifests).
 	Raw      string
@@ -150,6 +156,12 @@ func (u *Updater) development() bool {
 // Check asks the followed channel for a newer release. Disabled updates
 // check nothing.
 func (u *Updater) Check() (Release, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.check()
+}
+
+func (u *Updater) check() (Release, error) {
 	release := Release{Current: u.Current, Channel: settings.DefaultChannel, Development: u.development()}
 	current, err := u.Settings.Load()
 	release.Enabled, release.Upstream = current.Update.Enable, current.Update.Upstream
@@ -176,15 +188,19 @@ func (u *Updater) Check() (Release, error) {
 
 // SetEnabled turns auto-update on or off (update.enable), then checks again.
 func (u *Updater) SetEnabled(enable bool) (Release, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	if _, err := u.Settings.Update(func(s *settings.Settings) { s.Update.Enable = enable }); err != nil {
 		return Release{}, err
 	}
 
-	return u.Check()
+	return u.check()
 }
 
 // SetChannel follows channel, which must be one of Channels.
 func (u *Updater) SetChannel(channel string) (Release, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	current, err := u.Settings.Load()
 	if err != nil {
 		return Release{}, err
@@ -202,13 +218,25 @@ func (u *Updater) SetChannel(channel string) (Release, error) {
 		return Release{}, err
 	}
 
-	return u.Check()
+	return u.check()
 }
 
-// Install downloads tag, still offered by the channel, and verifies it; the
-// Wails updater then swaps it in on Restart.
+// Install checks the requested tag, downloads and verifies it, then restarts.
+// Checks and settings changes wait until this entire transaction completes.
 func (u *Updater) Install(tag string) error {
-	release, err := u.Check()
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if err := u.install(tag); err != nil {
+		return err
+	}
+	if u.restart != nil {
+		return u.restart()
+	}
+	return u.Wails.Restart(context.Background())
+}
+
+func (u *Updater) install(tag string) error {
+	release, err := u.check()
 	if err != nil {
 		return err
 	}
@@ -231,9 +259,4 @@ func (u *Updater) Install(tag string) error {
 	}
 
 	return u.Verify(u.Wails.DownloadedPath(), current)
-}
-
-// Restart quits; the Wails helper swaps the executable and starts it again.
-func (u *Updater) Restart() error {
-	return u.Wails.Restart(context.Background())
 }
