@@ -67,6 +67,24 @@ disables every GitHub request.
 On Windows, `SSH_AGENT_TOTP_VERIFY_SIGNED=<signed exe> go test ./internal/update`
 checks the actual signature-verification path.
 
+## Windows update leftovers
+
+When Windows still holds the previous executable, Wails renames it to
+`<executable>.old.<Unix nanoseconds>` before placing the new executable at its
+normal path. Its immediate removal can fail while the helper/kernel still
+holds the file; Wails also sweeps older leftovers during a later update.
+
+The resident app adds startup cleanup: a background worker captures regular
+files beside its own executable with exactly the `.old.` plus decimal timestamp
+suffix. It attempts removal six times, with five two-second waits,
+retrying only failed removals. A vanished file is already cleaned. Final
+failures are logged once and retried at the next application startup.
+
+The current executable, other applications' files, `.bak` backups, directories
+and symlinks are not cleanup targets. Cleanup does not block the tray or create
+a GUI, runs even with update checks disabled, and does not run in the updater
+helper or second-instance process. Other platforms do not perform this cleanup.
+
 ## Installation feedback
 
 The install action stays disabled with a spinner through download,

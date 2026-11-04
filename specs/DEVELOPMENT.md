@@ -114,3 +114,12 @@ The updater serializes checks, preference changes and the complete install
 transaction (tag check, download, digest/signature verification, restart).
 `App.Handle("update_install")` calls this transaction once; it does not perform
 an independently interleavable restart.
+
+## Windows startup cleanup
+
+`Runtime.Run` starts `internal/update.CleanupLegacy` off-thread, after Wails
+has handled helper mode and the single-instance lock. Matching, scope and the
+bounded retry policy are defined in [RELEASES.md](RELEASES.md#windows-update-leftovers).
+Tests use temporary executable directories and fake retry waits; the Windows
+test also holds a real file handle that denies deletion, then releases it
+before the retry. No test cleans the operator's installation.

@@ -13,6 +13,7 @@ import (
 	"github.com/131/ssh-agent-totp/internal/clock"
 	"github.com/131/ssh-agent-totp/internal/i18n"
 	"github.com/131/ssh-agent-totp/internal/tray"
+	"github.com/131/ssh-agent-totp/internal/update"
 	"github.com/131/ssh-agent-totp/winres"
 )
 
@@ -90,6 +91,12 @@ func NewRuntime(app *App) *Runtime {
 }
 
 func (r *Runtime) Run() error {
+	// Wails has already handled helper mode and acquired the resident instance.
+	go func() {
+		if err := update.CleanupLegacy(); err != nil {
+			log.Printf("legacy update cleanup: %v", err)
+		}
+	}()
 	// This opportunistic load and GUI Unlock/Retry retain the existing agent policy.
 	go func() { _, _ = r.app.Handle("unlock", nil) }()
 	go r.clock.Run(application.InvokeAsync)
