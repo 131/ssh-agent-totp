@@ -55,6 +55,8 @@ type Store struct {
 	Key   string
 	Crypt Crypt
 	Now   func() time.Time
+	// Changed runs after committed state changes, with the store unlocked.
+	Changed func()
 
 	mu       sync.Mutex
 	items    []item
@@ -62,6 +64,18 @@ type Store struct {
 	size     int64
 	nextID   int
 	loaded   bool
+	changed  bool
+}
+
+// unlock publishes one notification after a load/write transaction. The
+// observer may read Pinned or schedule UI work without taking a locked store.
+func (s *Store) unlock() {
+	changed := s.changed
+	s.changed = false
+	s.mu.Unlock()
+	if changed && s.Changed != nil {
+		s.Changed()
+	}
 }
 
 func (s *Store) now() time.Time {
@@ -123,7 +137,7 @@ func Marshal(tokens []totp.Token) []byte {
 // rewritten at once. Any error (agent, key, line) leaves the file untouched.
 func (s *Store) Load() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	return s.load()
 }
@@ -148,6 +162,7 @@ func (s *Store) load() error {
 		return i18n.Errorf("err.tokens.read", s.Path, err)
 	}
 
+	previous, loaded := s.items, s.loaded
 	s.items, s.loaded = nil, true
 	for _, token := range found {
 		s.nextID++
@@ -156,10 +171,14 @@ func (s *Store) load() error {
 
 	sortItems(s.items)
 	if clear {
-		return s.save(false)
+		if err := s.save(false); err != nil {
+			s.items, s.loaded = previous, loaded
+			return err
+		}
 	}
 
 	s.modified, s.size = s.stat()
+	s.changed = true
 	return nil
 }
 
@@ -226,7 +245,7 @@ func sortKey(token totp.Token) string {
 // Codes returns the current code of every token, in alphabetical order.
 func (s *Store) Codes() ([]Code, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	if err := s.fresh(); err != nil {
 		return nil, err
@@ -273,7 +292,7 @@ func (s *Store) Import(text string) (ImportResult, error) {
 		result.Skipped = []totp.Skipped{}
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	if err := s.fresh(); err != nil {
 		return result, err
@@ -321,7 +340,7 @@ func (s *Store) Add(token totp.Token) error {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	if err := s.fresh(); err != nil {
 		return err
@@ -356,7 +375,7 @@ func (s *Store) Rename(id int, issuer, account string) error {
 // Pin changes only the tray shortcut, keeping the latest token name.
 func (s *Store) Pin(id int, pinned bool) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	index, err := s.find(id)
 	if err != nil {
@@ -371,7 +390,7 @@ func (s *Store) Pin(id int, pinned bool) error {
 // Edit saves the name and optional pin state atomically.
 func (s *Store) Edit(id int, issuer, account string, pinned *bool) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	index, err := s.find(id)
 	if err != nil {
@@ -413,7 +432,7 @@ func (s *Store) RenameFolder(from, to string) (int, error) {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	if err := s.fresh(); err != nil {
 		return 0, err
@@ -448,7 +467,7 @@ func (s *Store) RenameFolder(from, to string) (int, error) {
 // Delete removes a token.
 func (s *Store) Delete(id int) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	index, err := s.find(id)
 	if err != nil {
@@ -461,7 +480,7 @@ func (s *Store) Delete(id int) error {
 // Export returns the otpauth:// URI of every token, one per line.
 func (s *Store) Export() (string, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	if err := s.fresh(); err != nil {
 		return "", err
@@ -486,6 +505,7 @@ func (s *Store) commit(updated []item) error {
 		return err
 	}
 
+	s.changed = true
 	return nil
 }
 
@@ -493,7 +513,7 @@ func (s *Store) commit(updated []item) error {
 // number of tokens.
 func (s *Store) Reseal(key string) (int, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	if err := s.fresh(); err != nil {
 		return 0, err
@@ -518,7 +538,7 @@ type PinnedItem struct {
 // Pinned returns the unlocked pins, sorted by their full displayed path.
 func (s *Store) Pinned() []PinnedItem {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	result := []PinnedItem{}
 	for _, current := range s.items {
@@ -546,7 +566,7 @@ func (s *Store) Pinned() []PinnedItem {
 // PinnedCode computes at click time and rejects removed or stale shortcuts.
 func (s *Store) PinnedCode(id int) (string, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.unlock()
 
 	index, err := s.find(id)
 	if err != nil {

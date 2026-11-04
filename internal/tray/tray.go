@@ -39,30 +39,30 @@ type Tray struct {
 	mu         sync.Mutex
 	pins       []*application.MenuItem
 	flashUntil time.Time
-	clicks     clickHandler
 }
 
 func Install(app *application.App, ticks *clock.Clock) *Tray {
 	t := &Tray{menu: app.Menu.New()}
-	t.icon = app.SystemTray.New().SetIcon(frame("00")).SetMenu(t.menu)
+	t.icon = app.SystemTray.New().SetIcon(frame("00"))
 	t.icon.SetTooltip(WindowTitle)
-	t.clicks = clickHandler{
-		delay: doubleClickDelay(), post: application.InvokeAsync,
-		menu: t.showMenu, open: func() {
-			if t.Open != nil {
-				t.Open()
-			}
-		},
-	}
-	t.icon.OnClick(t.clicks.singleClick)
-	t.icon.OnDoubleClick(t.clicks.doubleClick)
-	t.icon.OnRightClick(t.clicks.rightClick)
+	t.icon.OnClick(t.open)
+	t.icon.OnDoubleClick(t.open)
+	// Wails supplies the native context-menu path; Linux's desktop opens
+	// the published D-Bus menu without a programmatic OpenMenu call.
+	t.Refresh()
 	ticks.Subscribe(t.spin)
 	return t
 }
 
-// showMenu rebuilds the flat menu: pinned names (no codes), Open, Quit.
-func (t *Tray) showMenu() {
+func (t *Tray) open() {
+	if t.Open != nil {
+		t.Open()
+	}
+}
+
+// Refresh publishes the current flat menu without opening it. Run on the UI
+// thread after store/language changes, or before the tray starts.
+func (t *Tray) Refresh() {
 	var pins []tokens.PinnedItem
 	if t.Pinned != nil {
 		pins = t.Pinned()
@@ -82,14 +82,15 @@ func (t *Tray) showMenu() {
 	if len(pins) > 0 {
 		t.menu.AddSeparator()
 	}
-	t.menu.Add(i18n.T("tray.open")).OnClick(func(*application.Context) { t.Open() })
+	t.menu.Add(i18n.T("tray.open")).OnClick(func(*application.Context) { t.open() })
 	t.menu.AddSeparator()
 	t.menu.Add(i18n.T("tray.quit")).OnClick(func(*application.Context) { t.Quit() })
 	t.mu.Lock()
 	t.pins = items
 	t.mu.Unlock()
-	t.menu.Update()
-	t.icon.OpenMenu()
+	// SetMenu republishes the D-Bus tray on Linux; Menu.Update alone only
+	// rebuilds a GTK menu, not the desktop's exported shortcut entries.
+	t.icon.SetMenu(t.menu)
 }
 
 func menuFrame(now time.Time) string {

@@ -2,6 +2,16 @@
 
 Read the [guideline](dev_guideline.md): boring is good.
 
+## Target platforms
+
+**Windows, Linux and macOS (OS X) are the target platforms, through Wails.**
+The [shared-platform guideline](dev_guideline.md#target-platforms) governs
+changes. Windows is currently distributed; Linux/macOS distribution, native
+verification, autostart and update support remain ongoing work. Preserve the
+shared runtime/tray contract while completing those adapters.
+CI vets, tests and builds on all three platforms; native lifecycle integration
+is currently checked on Windows.
+
 ## Build and tests
 
 ```sh
@@ -55,6 +65,29 @@ user cache directory under `ssh-agent-totp/webview`. Known Wails v3.1
 deviation: Quit while the WebView2 controller is still initializing exits
 with code 1 (the lifecycle script reports it as a warning).
 
+## Tray contract verification
+
+[TRAY.md](TRAY.md#contract-status) defines the shared platform contract.
+`Tray.Install` publishes Open and Quit before startup. `tokens.Store.Changed`
+notifies after successful load/commit with the store unlocked; the runtime
+posts `Tray.Refresh` to the UI thread, also after language changes. Refresh
+republishes through `SystemTray.SetMenu`, including the Linux D-Bus menu.
+Primary activation opens/restores the GUI without a double-click timer; Wails
+supplies the native context-menu path.
+
+Verify on Windows, Linux and macOS, with disposable settings and tokens:
+
+- Before unlock (including an unavailable agent), the first context-menu
+  opening offers Open and Quit, without a preceding primary click.
+- Successful unlock/import, pin/unpin, deletion and renaming update the
+  published entries without a tray click; failed writes preserve the old menu.
+- Primary click opens/restores the GUI immediately; repeated activation does
+  not create another session. Closing it retains the tray.
+- Right-click displays the native context menu independently of primary-click
+  dispatch. Linux needs no programmatic `OpenMenu()` call.
+- A pinned entry copies its current code after changes and with the GUI closed;
+  Open and Quit remain available alongside pins.
+
 ## Layout
 
 | Path | Responsibility |
@@ -63,7 +96,7 @@ with code 1 (the lifecycle script reports it as a warning).
 | `runtime.go`, `window_session.go` | Resident ownership and disposable GUI/bridge (Wails) |
 | `ui/` | Embedded HTML, CSS and script, inlined into one page |
 | `internal/{tokens,totp}` | Sealed store, RFC 6238, import/export |
-| `internal/tray` | Tray icon frames, pinned menu and cancellable click dispatch |
+| `internal/tray` | Tray icon frames, pinned menu and immediate primary activation |
 | `internal/{clock,clipboard}` | Shared tick and private clipboard |
 | `internal/{update,startup}` | Wails updater (channels, Authenticode) and startup shortcut |
 | `internal/i18n`, `settings/` | Catalog and preferences |
@@ -104,9 +137,11 @@ the right. Pin/unpin uses one glyph and changes only its pressed style.
 
 ## Concurrency regression tests
 
-`internal/tray/click_test.go` holds the posted UI callbacks to verify that a
-later double/right/new single click cancels a stale menu request. No native
-menu is opened by these tests. `internal/update/update_test.go` holds signature
+`internal/tray/tray_test.go` verifies initial Open/Quit entries, pin replacement
+and removal, translated labels and immediate activation without opening a
+native menu. `internal/tokens/changes_test.go` verifies notification after
+load/import/pin/rename/delete and lazy reload, with the store readable by its
+observer; failed writes/unlocks leave committed pins unchanged. `internal/update/update_test.go` holds signature
 verification and restart while a channel change waits, and checks that a
 verification failure never restarts and leaves the transaction retryable.
 

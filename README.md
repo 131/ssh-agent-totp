@@ -50,12 +50,12 @@ Copied codes stay out of the Windows clipboard history and cloud clipboard.
 The borderless window uses a custom header, without an outer border, Windows
 shadow or rounded corners. The app starts in the notification area without
 creating a WebView2 browser.
-Double-click or **Open** creates the full window on demand. Closing it
+A left-click or **Open** creates the full window on demand. Closing it
 (or Escape) releases the browser and its processes, leaving the tray active;
 opening it again creates a fresh window. Minimizing only hides the window.
-A single click (or right-click) opens the tray menu; double-click opens the
-full window. The existing dial animates at one frame per
-second. A successful copy flashes a checkmark.
+Right-click opens the native tray menu. Open and Quit are available from
+startup; pinned shortcuts update after loading or changing tokens, without
+waiting for a tray click. The existing dial animates at one frame per second. A successful copy flashes a checkmark.
 Use Quit in the tray menu to exit. See the
 [resident-tray/dynamic-window contract](specs/TRAY.md#application-contract)
 and the [tray compromise](specs/TRAY.md#compromise).

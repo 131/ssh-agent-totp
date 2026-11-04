@@ -1,5 +1,12 @@
 # Tray
 
+## Contract status
+
+Windows, Linux and macOS share the tray contract below. The resident runtime
+publishes its initial menu, refreshes pins on committed store changes and opens
+the GUI on primary activation. Platform verification and Linux/macOS packaging,
+autostart and update support remain ongoing; the released target is Windows.
+
 ## Application contract
 
 **Permanent tray, dynamic WebView.** `Runtime` owns the resident services,
@@ -9,8 +16,8 @@ and UI thread; there is no IPC.
 
 | Action | GUI | Resident tray |
 | --- | --- | --- |
-| Launch, including sign-in | Absent; no browser processes | Starts |
-| Open / double-click / second launch | Creates a session or restores the existing one | Keeps running; a second process exits |
+| Launch, including sign-in | Absent; no browser processes | Starts with Open and Quit already published |
+| Primary (left) click / Open / second launch | Creates a session or restores the existing one | Keeps running; a second process exits |
 | Close / native X / Escape at list root | Destroys its window and releases the browser | Keeps running |
 | Minimize button / native minimize | Hides the session, retaining its browser | Keeps running |
 | Quit | Releases any remaining session | Removes icon and exits |
@@ -28,10 +35,17 @@ session. Only Quit ends the application. See [implementation](DEVELOPMENT.md#nat
 
 ## Agent and pins
 
-Startup tries to unlock/load the store off-thread. Before a successful load,
-the menu contains Open and Quit only. Pins are inside the sealed token file,
-so their names are unavailable before decryption. GUI Unlock/Retry checks
+**Publish Open and Quit before the tray becomes interactive, on Windows,
+Linux and macOS.** Startup tries to unlock/load the store off-thread. Before a
+successful load, these are the only entries: pins are inside the sealed token
+file, so their names are unavailable before decryption. GUI Unlock/Retry checks
 the agent and reloads the store on each new page.
+
+**Refresh the published pin entries after successful unlock/load, import,
+pin/unpin or deletion, without waiting for a tray click.** Renaming a token
+or folder also refreshes its displayed shortcut path; changing the language
+refreshes Open and Quit. Read the committed resident store, then publish the
+menu update on the UI thread. Failed writes do not publish tentative changes.
 
 Loaded tokens remain in resident memory. With an unchanged file, pinned
 codes can still be copied after the agent becomes unavailable, even if a
@@ -40,7 +54,7 @@ the agent/key; there is no automatic store lock when the GUI closes.
 
 ## Compromise
 
-The standard Windows popup menu shows **token names only, no codes**:
+The native Windows/Linux/macOS context menu shows **token names only, no codes**:
 full paths, alphabetically, one row per pin, without submenus or owner-draw.
 The main window displays codes, folders and edit controls.
 
@@ -51,14 +65,17 @@ The main window displays codes, folders and edit controls.
 - Each pin has an animated bitmap ring: opaque white background, gray track,
   soft blue arc. Open and Quit have no icons and follow the pinned rows.
 - Clicking a pin computes its code at click time, using the same clipboard
-  function as the GUI, outside clipboard history/cloud sync.
+  function as the GUI, with clipboard-history/cloud-sync exclusion on Windows.
 - Success flashes a checkmark for three seconds. Errors restore an existing GUI or use a native dialog when closed.
-- Single/right-click opens the menu; double-click creates/restores the GUI.
-  The single-click delay follows Windows' configured double-click interval
-  (500 ms fallback on other platforms). Double-click, right-click and a newer
-  single click invalidate earlier delayed menu requests, even after their timer
-  has posted to the UI queue. The release after a double-click is ignored.
-  Menu construction and bitmap refresh both run on the UI thread.
+- **Primary (left) click creates/restores the GUI on Windows, Linux and macOS.**
+  It does not open the menu or wait for a double-click. Repeated activation
+  restores the same session rather than creating another window.
+- **Right-click uses the native desktop context menu, with its entries already
+  published.** Menu availability and freshness do not depend on a preceding
+  primary click or rebuilding the menu inside a click handler. A platform
+  adapter may request the native popup when its toolkit requires it (Windows/macOS);
+  Linux does not depend on programmatic `OpenMenu()` support.
+- Menu construction, publication and bitmap refresh run on the UI thread.
 
 ## Icon
 
@@ -83,5 +100,5 @@ bridge. The bridge skips closed sessions; the page listens for
 `fireEvent("tick", modulus, percent, now)` through `window.addEventListener`.
 `modulus` is Unix seconds modulo 30, `percent` is elapsed 0–100 progress, and
 `now` is UTC milliseconds truncated to a whole second. There are no per-view
-intervals, accumulated frame counters or generic event bus. The one-shot
-click/double-click timer is interaction handling, not another animation clock.
+intervals, accumulated frame counters or generic event bus. Pin membership
+and labels refresh on store/language changes, not on an animation timer.

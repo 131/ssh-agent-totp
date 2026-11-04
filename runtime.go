@@ -58,6 +58,7 @@ func NewRuntime(app *App) *Runtime {
 	r.icon.Open, r.icon.Quit = r.OpenWindow, r.wails.Quit
 	r.icon.Pinned = app.Tokens.Pinned
 	r.icon.CopyPinned = r.CopyPinned
+	app.Tokens.Changed = func() { application.InvokeAsync(r.icon.Refresh) }
 	r.clock.Subscribe(func(tick clock.Tick) {
 		if session := r.session(); session != nil {
 			session.Tick(tick)
@@ -79,6 +80,7 @@ func NewRuntime(app *App) *Runtime {
 		return nil
 	}
 	app.Reload = func() {
+		application.InvokeAsync(r.icon.Refresh)
 		if session := r.session(); session != nil {
 			session.Reload()
 		}

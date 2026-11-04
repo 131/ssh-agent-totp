@@ -1,5 +1,15 @@
 # Development guideline
 
+## Target platforms
+
+**Target Windows, Linux and macOS through Wails. Cross-platform support is
+ongoing work; changes must preserve the shared application contract rather
+than diverging into Windows-only behavior.** Keep token operations, resident
+tray, disposable GUI and interaction semantics shared. Isolate native adapters
+where platform capabilities differ (clipboard, autostart, verification and
+packaging); document unsupported capabilities and remaining verification.
+A portable runtime does not by itself establish release readiness.
+
 ## Boring is good
 
 Choose the dull, obvious solution, the one a reader understands at first

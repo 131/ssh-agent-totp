@@ -15,6 +15,33 @@ public class LifecycleWin {
  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hwnd);
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
+ [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string name, string title);
+ [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+ [DllImport("user32.dll")] public static extern int GetMenuItemCount(IntPtr menu);
+ [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetMenuString(IntPtr menu, uint item, StringBuilder text, int count, uint flags);
+ public static IntPtr Tray(uint pid) {
+  IntPtr hwnd = IntPtr.Zero;
+  while ((hwnd = FindWindowEx(new IntPtr(-3), hwnd, "WailsWebviewWindow", null)) != IntPtr.Zero) {
+   uint owner; GetWindowThreadProcessId(hwnd, out owner);
+   if (owner == pid) return hwnd;
+  }
+  return IntPtr.Zero;
+ }
+ public static IntPtr Popup(uint pid) {
+  IntPtr found = IntPtr.Zero;
+  EnumWindows((hwnd, data) => {
+   uint owner; GetWindowThreadProcessId(hwnd, out owner);
+   var name = new StringBuilder(256); GetClassName(hwnd, name, name.Capacity);
+   if (owner == pid && name.ToString() == "#32768" && IsWindowVisible(hwnd)) { found = hwnd; return false; }
+   return true;
+  }, IntPtr.Zero);
+  return found;
+ }
+ public static string MenuLabel(IntPtr menu, uint position) {
+  var text = new StringBuilder(256);
+  GetMenuString(menu, position, text, text.Capacity, 0x400);
+  return text.ToString();
+ }
  public static bool VisibleBrowser(IntPtr parent) {
   bool visible = false;
   EnumChildWindows(parent, (hwnd, data) => {
@@ -91,6 +118,32 @@ try {
  if ([LifecycleWin]::IsWindowVisible($hostWindow)) { throw 'Tray host is visible' }
  if ([LifecycleWin]::Find($process.Id, 'ssh-agent-totp') -ne [IntPtr]::Zero -or @(Browser-Tree $process.Id).Count) { throw 'Browser created at startup' }
  'PASS: tray-only startup'
+ # The first right-click must work before any primary click or unlock.
+ $trayWindow = [LifecycleWin]::Tray($process.Id)
+ if ($trayWindow -eq [IntPtr]::Zero) { throw 'No message-only tray window' }
+ [LifecycleWin]::PostMessage($trayWindow, 0x401, [IntPtr]::Zero, [IntPtr]0x7B) | Out-Null
+ Wait-For { [LifecycleWin]::Popup($process.Id) -ne [IntPtr]::Zero } 'First native context menu did not open'
+ $popup = [LifecycleWin]::Popup($process.Id)
+ $menu = [LifecycleWin]::SendMessage($popup, 0x1E1, [IntPtr]::Zero, [IntPtr]::Zero)
+ if ([LifecycleWin]::GetMenuItemCount($menu) -ne 3 -or
+     [LifecycleWin]::MenuLabel($menu, 0) -ne 'Ouvrir' -or
+     [LifecycleWin]::MenuLabel($menu, 2) -ne 'Quitter') { throw 'Initial menu is not Open / separator / Quit' }
+ [LifecycleWin]::PostMessage($popup, 0x100, [IntPtr]0x1B, [IntPtr]::Zero) | Out-Null
+ Wait-For { [LifecycleWin]::Popup($process.Id) -eq [IntPtr]::Zero } 'Context menu did not close'
+ if ([LifecycleWin]::Find($process.Id, 'ssh-agent-totp') -ne [IntPtr]::Zero) { throw 'Context menu created a GUI' }
+ 'PASS: first native context menu contains Open and Quit before unlock'
+ # One primary-click event creates the GUI, without a double-click or relaunch.
+ [LifecycleWin]::PostMessage($trayWindow, 0x401, [IntPtr]::Zero, [IntPtr]0x202) | Out-Null
+ Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'Primary click did not open GUI'
+ $primaryGui = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp')
+ [LifecycleWin]::PostMessage($trayWindow, 0x401, [IntPtr]::Zero, [IntPtr]0x202) | Out-Null
+ Start-Sleep -Milliseconds 300
+ if ([LifecycleWin]::Find($process.Id, 'ssh-agent-totp') -ne $primaryGui) { throw 'Repeated primary click replaced GUI' }
+ $primaryBrowsers = @(Browser-Tree $process.Id)
+ Post $primaryGui 0x10
+ Wait-For { -not [LifecycleWin]::IsWindow($primaryGui) } 'Primary-click GUI did not close'
+ Wait-For { @(Get-Process -Id $primaryBrowsers -ErrorAction SilentlyContinue).Count -eq 0 } 'Primary-click browser survived Close'
+ 'PASS: primary click opens GUI; repeated click restores the same session'
  for ($cycle = 1; $cycle -le 3; $cycle++) {
   Show-Gui
   Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'GUI did not open'

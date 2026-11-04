@@ -11,7 +11,7 @@ jobs:
   go:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       # Windows runners ship Git with core.autocrlf=true, which would turn LF sources into CRLF
@@ -29,6 +29,8 @@ jobs:
       - run: go test ./...
       - run: go build -ldflags "-H windowsgui" -o ssh-agent-totp.exe .
         if: runner.os == 'Windows'
+      - run: go build -trimpath -o ssh-agent-totp .
+        if: runner.os != 'Windows'
 
       - name: Ensure WebView2 runtime for native integration
         if: runner.os == 'Windows'
