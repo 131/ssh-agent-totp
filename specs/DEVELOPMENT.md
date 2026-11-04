@@ -11,65 +11,56 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
   -ldflags "-H windowsgui -s -w -X main.version=<version>" -o ssh-agent-totp.exe .
 ```
 
-On Windows, also test the pinned dependency and browser lifecycle:
+Linux builds need the Wails GTK4/WebKitGTK headers
+(`libgtk-4-dev libwebkitgtk-6.0-dev` on Debian/Ubuntu). On Windows, also test
+the browser lifecycle:
 
 ```powershell
-$module = go list -m -f '{{.Dir}}' github.com/jchv/go-webview2
-Push-Location $module
-go vet -unsafeptr=false ./...; go test ./...
-Pop-Location
 ./scripts/test-webview-lifecycle.ps1 -Executable ./ssh-agent-totp.exe
 ```
 
 The integration script uses temporary APPDATA, an unavailable agent and
-updates disabled. Use a test build with an isolated mutex **and host title** when another instance
-is running; never target the installed executable. Unit tests use fake crypt,
+updates disabled. Stop any other instance of the same build first (Wails'
+single-instance lock is per application); never target the installed executable. Unit tests use fake crypt,
 not a real agent. For manual checks use a throwaway APPDATA; a clear token
 file is sealed on load. CI ensures the WebView2 runtime, verifies its installer signature if needed,
-then tests the downloaded, pinned dependency, native session bridge and lifecycle
-check on Windows.
-`SSH_AGENT_TOTP_NATIVE_TESTS=1 go test -run TestNativeSessionBridge .` opts into
-the real-GUI bridge test; other unit tests use disposable fake views.
+then runs the lifecycle check on Windows.
 
 ## Native runtime and GUI session
 
 [TRAY.md](TRAY.md#application-contract) defines the resident-tray/dynamic-GUI
 contract and [agent/pin behavior](TRAY.md#agent-and-pins).
-`main_windows.go` bootstraps `Runtime` (`runtime_windows.go`), which owns one
-`App`, native host, tray, clock and optional `WindowSession`. `internal/desktop`
-provides the persistent HWND/message loop/dispatch/timer and native GUI frame;
-`internal/tray` handles only the notification icon and shortcut menu.
-`WindowSession` (`window_session_windows.go`) owns its WebView, frame, bridge
-and closed-state guard. Open constructs it hidden, then publishes/shows the
-completed session: parent HWND first, then the explicitly hidden WebView2
-controller. Tests check browser-child visibility, not just the outer frame.
-Close detaches/destroys only that GUI and releases its
-browser references; a failed Close restores the same session for retry.
+`main.go` bootstraps `Runtime` (`runtime.go`), which owns one `App`, the
+[Wails v3](https://v3.wails.io) application, tray, clock and optional
+`WindowSession`. Wails provides the message loop, single-instance lock,
+frameless window, WebView2/WebKit, tray and dialogs; `internal/tray` only
+builds the icon frames and pinned menu. `WindowSession` (`window_session.go`)
+owns one hidden-then-shown Wails window, its bridge and closed-state guard.
+Close destroys that window and releases its browser; the next Open creates a
+fresh one. Wails' `ApplicationShouldTerminateAfterLastWindowClosed`/
+`DisableQuitOnLastWindowClosed` keep the tray resident.
 
-Agent/file work runs off-thread; results return through HWND dispatch so
-native modal loops still deliver them. WM_APP and modal-loop completion drain
-the current WebView's private binding queue. Replies/window actions retain
-the originating session, whose dispatch guard drops work after Close; the
-one-time tick bridge skips closed sessions. Frame callbacks share one native
-procedure and remove their HWND lookup on detach, without retaining old sessions. No UI thread waits for browser-process exit. DLLs/COM may remain loaded.
+The page is inline HTML (no asset server files, no generated bindings).
+`app.js` posts `{id, method, args}` with `_wails.invoke` once Wails' runtime
+config is ready; `RawMessageHandler` hands it to the session, which runs
+`App.Handle` off-thread and replies through `ExecJS`. Replies are dropped after
+Close. Window actions (drag, resize edges, minimize, close) map to Wails'
+frameless messages. Agent/file work never runs on the UI thread.
 
-The WebView dependency is the explicitly maintained
-[131/go-webview2 fork](https://github.com/131/go-webview2), pinned by a remote
-replacement in `go.mod`. Its original module path preserves imports. The fork's
-[lifetime contract](https://github.com/131/go-webview2/blob/master/LIFECYCLE.md)
-defines COM ownership, Close/dispatch, threading, alternatives and scoped vet.
-The borderless WebView2 window uses no cgo. `SSH_AGENT_TOTP_DEBUG=1` enables developer tools; runtime
-data lives in the user cache directory under `ssh-agent-totp/webview`.
+`SSH_AGENT_TOTP_DEBUG=1` enables developer tools; WebView2 data lives in the
+user cache directory under `ssh-agent-totp/webview`. Known Wails v3.1
+deviation: Quit while the WebView2 controller is still initializing exits
+with code 1 (the lifecycle script reports it as a warning).
 
 ## Layout
 
 | Path | Responsibility |
 | --- | --- |
-| `app.go`, `main_windows.go` | Services/API and bootstrap |
-| `runtime_windows.go`, `window_session_windows.go` | Resident ownership and disposable GUI/bridge |
+| `app.go`, `main.go`, `parent_*.go` | Services/API, bootstrap and post-update wait |
+| `runtime.go`, `window_session.go` | Resident ownership and disposable GUI/bridge (Wails) |
 | `ui/` | Embedded HTML, CSS and script, inlined into one page |
 | `internal/{tokens,totp}` | Sealed store, RFC 6238, import/export |
-| `internal/desktop`, `internal/tray` | Native host/frame/dispatch and notification icon/menu |
+| `internal/tray` | Tray icon frames and pinned menu |
 | `internal/{clock,clipboard}` | Shared tick and private clipboard |
 | `internal/{update,startup}` | Verified updates and startup shortcut |
 | `internal/i18n`, `settings/` | Catalog and preferences |
@@ -84,8 +75,8 @@ substitutions. Tests check matching catalogs and all referenced keys.
 ## Icon and manifest
 
 `winres/icon.py` defines the stopwatch/shackle, 30 tray frames, white/gray/blue
-menu rings and copied checkmark. The manifest/icons are linked through
-`rsrc_windows_amd64.syso`. Regenerate after editing them:
+menu rings and copied checkmark as PNG under `internal/tray/frames`. The
+manifest and application icon are linked through `rsrc_windows_amd64.syso`. Regenerate after editing them:
 
 ```sh
 (cd winres && python3 icon.py)
@@ -93,13 +84,13 @@ go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
 ```
 
 Shared resources provide tray animation without runtime drawing; menu rows
-use the standard bitmap column, not owner-draw. Pins share one frame bitmap,
-and replaced bitmaps are freed. Motion/timing are defined in
+use the standard bitmap column, not owner-draw. Motion/timing are defined in
 [TRAY.md](TRAY.md#one-application-tick).
 
 ## Shared clock and GUI dispatch
 
-One native timer serves the tray, menu and optional page. No page interval
+One wall-clock-aligned goroutine (`clock.Run`) posts each second to the UI
+thread and serves the tray, menu and optional page. No page interval
 or subscriber-specific clock is installed; native popup and move/resize
 loops must continue processing replies and binding completions.
 

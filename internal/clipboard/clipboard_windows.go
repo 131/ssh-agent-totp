@@ -47,14 +47,14 @@ func globalText(data []uint16) uintptr {
 }
 
 // Copy puts text on the clipboard, kept out of the Windows clipboard
-// history and cloud sync: codes are short lived.
-func Copy(hwnd uintptr, text string) error {
+// history and cloud sync: codes are short lived. Call it on the UI thread.
+func Copy(text string) error {
 	data, err := windows.UTF16FromString(text)
 	if err != nil {
 		return err
 	}
 
-	if ok, _, err := procOpenClipboard.Call(hwnd); ok == 0 {
+	if ok, _, err := procOpenClipboard.Call(0); ok == 0 {
 		return err
 	}
 

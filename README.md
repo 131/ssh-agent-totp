@@ -53,7 +53,7 @@ Double-click or **Open** creates the full window on demand. Closing it
 opening it again creates a fresh window. Minimizing only hides the window.
 A single click (or right-click) opens the tray menu; double-click opens the
 full window. The existing dial animates at one frame per
-second. A successful copy flashes a checkmark and posts a silent notification.
+second. A successful copy flashes a checkmark.
 Use Quit in the tray menu to exit. See the
 [resident-tray/dynamic-window contract](specs/TRAY.md#application-contract)
 and the [tray compromise](specs/TRAY.md#compromise).
@@ -99,8 +99,8 @@ secrets are gone.
 - [OpenAI](https://openai.com) Codex, in collaboration
 - [ssh-agent-crypt](https://github.com/131/ssh-agent-crypt): secrets sealed by
   the SSH agent
-- [131/go-webview2](https://github.com/131/go-webview2): host-owned WebView2 lifetime,
-  based on [jchv/go-webview2](https://github.com/jchv/go-webview2), without cgo
+- [Wails v3](https://github.com/wailsapp/wails) (MIT): window, WebView, tray and
+  single instance
 - Code signing, courtesy of Essilor International
 
 See [CREDITS.md](CREDITS.md).

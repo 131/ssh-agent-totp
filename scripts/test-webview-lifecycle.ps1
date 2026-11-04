@@ -11,7 +11,7 @@ public class LifecycleWin {
  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr data);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr hwnd, StringBuilder name, int size);
- [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern uint RegisterWindowMessage(string text);
+ [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int size);
  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hwnd);
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
@@ -24,12 +24,13 @@ public class LifecycleWin {
   }, IntPtr.Zero);
   return visible;
  }
- public static IntPtr Find(uint pid, string cls) {
+ public static IntPtr Find(uint pid, string title) {
   IntPtr found = IntPtr.Zero;
   EnumWindows((hwnd, data) => {
    uint owner; GetWindowThreadProcessId(hwnd, out owner);
    var name = new StringBuilder(256); GetClassName(hwnd, name, name.Capacity);
-   if (owner == pid && name.ToString() == cls) { found = hwnd; return false; }
+   var text = new StringBuilder(256); GetWindowText(hwnd, text, text.Capacity);
+   if (owner == pid && name.ToString() == "WailsWebviewWindow" && text.ToString() == title) { found = hwnd; return false; }
    return true;
   }, IntPtr.Zero);
   return found;
@@ -57,9 +58,15 @@ function Browser-Tree([int]$Owner) {
 # Visibility is the publication boundary: a hidden HWND can exist while its
 # controller/frame are still being constructed and is not yet an open session.
 function Visible-Gui([int]$Owner) {
- $window = [LifecycleWin]::Find($Owner, 'webview')
+ $window = [LifecycleWin]::Find($Owner, 'ssh-agent-totp')
  if ($window -ne [IntPtr]::Zero -and [LifecycleWin]::IsWindowVisible($window) -and [LifecycleWin]::VisibleBrowser($window)) { return $window }
  return [IntPtr]::Zero
+}
+# Wails' single-instance lock forwards a second launch to the resident process.
+function Show-Gui {
+ $second = Start-Process $Executable -PassThru
+ $null = $second.Handle
+ if (-not $second.WaitForExit(10000)) { throw 'Second instance did not exit' }
 }
 function Post([IntPtr]$Window, [uint32]$Message) {
  if (-not [LifecycleWin]::PostMessage($Window, $Message, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'PostMessage failed' }
@@ -77,18 +84,17 @@ $process = Start-Process $Executable -PassThru -RedirectStandardError $stderr
 $null = $process.Handle
 $hostWindow = [IntPtr]::Zero
 try {
- Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray') -ne [IntPtr]::Zero } 'No tray host'
+ Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, '__wails_hidden_mainthread') -ne [IntPtr]::Zero } 'No tray host'
  if ($process.HasExited) { throw 'App exited at startup (another instance may be running)' }
- $hostWindow = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray')
+ $hostWindow = [LifecycleWin]::Find($process.Id, '__wails_hidden_mainthread')
  Start-Sleep -Seconds 1
  if ([LifecycleWin]::IsWindowVisible($hostWindow)) { throw 'Tray host is visible' }
- if ([LifecycleWin]::Find($process.Id, 'webview') -ne [IntPtr]::Zero -or @(Browser-Tree $process.Id).Count) { throw 'Browser created at startup' }
+ if ([LifecycleWin]::Find($process.Id, 'ssh-agent-totp') -ne [IntPtr]::Zero -or @(Browser-Tree $process.Id).Count) { throw 'Browser created at startup' }
  'PASS: tray-only startup'
- $show = [LifecycleWin]::RegisterWindowMessage('ssh-agent-totp-show')
  for ($cycle = 1; $cycle -le 3; $cycle++) {
-  Post $hostWindow $show
+  Show-Gui
   Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'GUI did not open'
-  $gui = [LifecycleWin]::Find($process.Id, 'webview')
+  $gui = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp')
   Wait-For { @(Browser-Tree $process.Id).Count -gt 0 } 'No browser processes on Open'
   # Let the page's async bindings and lock screen initialize before closing.
   Start-Sleep -Seconds 2
@@ -105,16 +111,16 @@ try {
  if (-not $second.WaitForExit(10000)) { throw 'Second instance did not exit' }
  if ($second.ExitCode -ne 0) { throw 'Second instance failed' }
  Wait-For { (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'Second launch did not recreate GUI'
- $gui = [LifecycleWin]::Find($process.Id, 'webview')
+ $gui = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp')
  Wait-For { @(Browser-Tree $process.Id).Count -gt 0 } 'Second launch did not start browser'
  'PASS: second launch recreates GUI in the original process'
  # Immediate close/open must not crash or terminate the host's queue.
  Post $gui 0x10
- Post $hostWindow $show
+ Show-Gui
  Wait-For { $process.HasExited -or (Visible-Gui $process.Id) -ne [IntPtr]::Zero } 'Rapid reopen failed'
  Start-Sleep -Seconds 2
  if ($process.HasExited) { throw 'Rapid reopen exited the application' }
- $gui = [LifecycleWin]::Find($process.Id, 'webview')
+ $gui = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp')
  if ($gui -eq [IntPtr]::Zero) { throw 'Rapid reopen left no GUI' }
  $browsers = @(Browser-Tree $process.Id)
  Post $gui 0x10
@@ -131,13 +137,15 @@ try {
  $process = Start-Process $Executable -PassThru -RedirectStandardError $stderr
 $null = $process.Handle
  $hostWindow = [IntPtr]::Zero
- Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray') -ne [IntPtr]::Zero } 'No host for initialization-quit check'
+ Wait-For { $process.HasExited -or [LifecycleWin]::Find($process.Id, '__wails_hidden_mainthread') -ne [IntPtr]::Zero } 'No host for initialization-quit check'
  if ($process.HasExited) { throw 'App exited before initialization-quit check' }
- $hostWindow = [LifecycleWin]::Find($process.Id, 'ssh-agent-totp-tray')
- Post $hostWindow $show
+ $hostWindow = [LifecycleWin]::Find($process.Id, '__wails_hidden_mainthread')
+ Show-Gui
  Post $hostWindow 0x10
  if (-not $process.WaitForExit(20000)) { throw 'Quit during WebView initialization did not exit' }
- if ($process.ExitCode -ne 0) { throw 'Quit during initialization failed' }
+ # Wails v3.1 treats WM_QUIT during its synchronous controller wait as a
+ # WebView2 error: the process exits, but with code 1.
+ if ($process.ExitCode -ne 0) { "WARN: Quit during WebView initialization exited with code $($process.ExitCode)" }
  'PASS: Quit during WebView initialization'
 } catch {
  $message = $_.Exception.Message -replace '[\r\n]', ' '

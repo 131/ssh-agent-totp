@@ -11,9 +11,9 @@ type Tick struct {
 	Percent float64
 }
 
-// Clock is owned by the UI thread; each subscriber registers once.
+// Clock is the only periodic timer; each subscriber registers once before Run.
 // The optional GUI bridge subscribes once and skips ticks while closed.
-// The native timer calls Fire. There are no subscriber-specific timers.
+// There are no subscriber-specific timers.
 type Clock struct {
 	listeners []func(Tick)
 }
@@ -29,5 +29,14 @@ func (c *Clock) Fire(now time.Time) {
 
 	for _, listener := range c.listeners {
 		listener(tick)
+	}
+}
+
+// Run fires every wall-clock second through post (e.g. the UI thread).
+func (c *Clock) Run(post func(func())) {
+	for {
+		now := time.Now()
+		time.Sleep(now.Truncate(time.Second).Add(time.Second).Sub(now))
+		post(func() { c.Fire(time.Now()) })
 	}
 }

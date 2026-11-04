@@ -1,6 +1,6 @@
 # Draws the ssh-agent-totp icon: a yellow stopwatch whose crown is a padlock
 # shackle, on a black rounded tile (vauth-desktop family, colours swapped).
-# Regenerates icon.png (1024 px) and icon.ico.
+# Regenerates icon.png (1024 px), icon.ico and the tray frames.
 from PIL import Image, ImageDraw
 
 S, YELLOW, BLACK = 1024, "#FFD814", "#111111"
@@ -23,13 +23,14 @@ image.save("icon.png")
 image.resize((256, 256), Image.LANCZOS).save("icon.ico", sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
 
 # The existing dial becomes a 30-second tray spinner; keep the tile and crown.
-# Small shared resources avoid runtime rendering and icon allocation/leaks.
+# Small PNG frames, embedded by internal/tray, avoid runtime rendering.
 from pathlib import Path
-import json
-Path("frames").mkdir(exist_ok=True)
-resources = json.loads(Path("winres.json").read_text())
+frames = Path("../internal/tray/frames")
+frames.mkdir(exist_ok=True)
+for old in frames.glob("*.png"):
+    old.unlink()
 
-def save_menu_frame(second, resource_id):
+def save_menu_frame(second):
     # Same ring geometry as ui/app.js: white surface, gray track, soft blue arc.
     menu = Image.new("RGBA", (S, S), "#FFFFFF")
     ring = ImageDraw.Draw(menu)
@@ -38,28 +39,20 @@ def save_menu_frame(second, resource_id):
     ring.ellipse(bounds, outline="#DFE3E8", width=stroke)
     if second:
         ring.arc(bounds, -90, -90 + 360 * second / 30, fill="#6B92BD", width=stroke)
-    name = f"frames/menu-{resource_id}.ico"
-    menu.resize((48, 48), Image.LANCZOS).save(name, sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48)])
-    resources["RT_GROUP_ICON"][f"#{resource_id}"] = {"0000": name}
+    menu.resize((16, 16), Image.LANCZOS).save(frames / f"menu-{second:02}.png")
 
-save_menu_frame(10, 33)
+bounds = (cx - r + 136, cy - r + 136, cx + r - 136, cy + r - 136)
 for second in range(30):
     frame = image.copy()
     dial = ImageDraw.Draw(frame)
-    bounds = (cx - r + 136, cy - r + 136, cx + r - 136, cy + r - 136)
     dial.ellipse(bounds, fill=BLACK)
     if second:
         dial.pieslice(bounds, -90, -90 + second * 12, fill=YELLOW)
     dial.ellipse((cx - 40, cy - 40, cx + 40, cy + 40), fill=YELLOW)
-    name = f"frames/{second:02}.ico"
-    frame.resize((48, 48), Image.LANCZOS).save(name, sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48)])
-    resources["RT_GROUP_ICON"][f"#{second + 2}"] = {"0000": name}
-    save_menu_frame(second, second + 34)
+    frame.resize((32, 32), Image.LANCZOS).save(frames / f"{second:02}.png")
+    save_menu_frame(second)
 frame = image.copy()
 dial = ImageDraw.Draw(frame)
 dial.ellipse(bounds, fill=BLACK)
 dial.line([(320, 610), (460, 760), (725, 450)], fill=YELLOW, width=80)
-frame.resize((48, 48), Image.LANCZOS).save("frames/copied.ico", sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48)])
-resources["RT_GROUP_ICON"]["#32"] = {"0000": "frames/copied.ico"}
-save_menu_frame(10, 64)
-Path("winres.json").write_text(json.dumps(resources, indent=2) + "\n")
+frame.resize((32, 32), Image.LANCZOS).save(frames / "copied.png")

@@ -3,7 +3,7 @@
 ## Application contract
 
 **Permanent tray, dynamic WebView.** `Runtime` owns the resident services,
-host HWND, clipboard, clock and notification icon. An optional `WindowSession`
+Wails application, clipboard, clock and notification icon. An optional `WindowSession`
 owns the GUI/frame/bridge, not the application. Both use one native process
 and UI thread; there is no IPC.
 
@@ -11,17 +11,17 @@ and UI thread; there is no IPC.
 | --- | --- | --- |
 | Launch, including sign-in | Absent; no browser processes | Starts |
 | Open / double-click / second launch | Creates a session or restores the existing one | Keeps running; a second process exits |
-| Close / native X / Escape at list root | Releases WebView2 and destroys its HWND | Keeps running |
+| Close / native X / Escape at list root | Destroys its window and releases the browser | Keeps running |
 | Minimize | Hides the session, retaining its browser | Keeps running |
 | Quit | Releases any remaining session | Removes icon and exits |
 
-Close releases owned COM references and queued UI completions. Browser
+Close releases the window and drops queued replies. Browser
 processes exit asynchronously; DLLs may stay loaded. No process is killed
 externally. The next Open loads a fresh page: saved tokens/pins/settings
 persist, while navigation, dialogs and unsaved form contents do not.
 Closing the GUI neither locks the token store nor restarts services. Backend
 work may finish, but old replies/window actions cannot target a replacement
-session. Only Quit ends the host's loop. See [implementation](DEVELOPMENT.md#native-runtime-and-gui-session).
+session. Only Quit ends the application. See [implementation](DEVELOPMENT.md#native-runtime-and-gui-session).
 
 ## Agent and pins
 
@@ -49,8 +49,7 @@ The main window displays codes, folders and edit controls.
   soft blue arc. Open and Quit have no icons and follow the pinned rows.
 - Clicking a pin computes its code at click time, using the same clipboard
   function as the GUI, outside clipboard history/cloud sync.
-- Success posts a silent notification and flashes a checkmark for three
-  seconds. Errors restore an existing GUI or use a native dialog when closed.
+- Success flashes a checkmark for three seconds. Errors restore an existing GUI or use a native dialog when closed.
 - Single/right-click opens the menu; double-click creates/restores the GUI.
 
 ## Icon
@@ -70,7 +69,7 @@ or move/resize loops; those loops must not strand a pending reply.
 
 ## One application tick
 
-One Win32 timer fires `internal/clock.Clock` at 1 Hz, with or without a GUI.
+One wall-clock-aligned ticker fires `internal/clock.Clock` at 1 Hz on the UI thread, with or without a GUI.
 Subscribers register once: tray frame, pinned-menu bitmap and optional GUI
 bridge. The bridge skips closed sessions; the page listens for
 `fireEvent("tick", modulus, percent, now)` through `window.addEventListener`.

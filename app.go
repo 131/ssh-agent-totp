@@ -34,7 +34,7 @@ type App struct {
 	Window func(action string) error
 }
 
-func NewApp(open func(string) error) *App {
+func NewApp() *App {
 	store := settings.DefaultStore()
 	current, _ := store.Load()
 	i18n.Set(current.Language)
@@ -42,7 +42,6 @@ func NewApp(open func(string) error) *App {
 	agent := sshagentcrypt.DefaultAgentAddress
 	return &App{
 		Tokens:   &tokens.Store{Path: store.TokensPath(current), Key: current.Tokens.Key, Crypt: tokens.AgentCrypt(agent)},
-		Open:     open,
 		Agent:    agent,
 		Updater:  update.New(version, store, update.Authenticode),
 		Startup:  startup.DefaultStore(),

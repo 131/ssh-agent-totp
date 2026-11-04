@@ -20,6 +20,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install Wails Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev
       - run: gofmt -l . && test -z "$(gofmt -l .)"
         shell: bash
       - run: go vet ./...
@@ -27,26 +30,9 @@ jobs:
       - run: go build -ldflags "-H windowsgui" -o ssh-agent-totp.exe .
         if: runner.os == 'Windows'
 
-      - name: Test pinned WebView2 dependency
-        if: runner.os == 'Windows'
-        run: |
-          $module = go list -m -f '{{.Dir}}' github.com/jchv/go-webview2
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Push-Location $module
-          try {
-            go vet -unsafeptr=false ./...
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            go test ./...
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          } finally { Pop-Location }
       - name: Ensure WebView2 runtime for native integration
         if: runner.os == 'Windows'
         run: ./scripts/ensure-webview2.ps1
-      - name: Verify native WindowSession bridge
-        if: runner.os == 'Windows'
-        env:
-          SSH_AGENT_TOTP_NATIVE_TESTS: '1'
-        run: go test -v -run '^TestNativeSessionBridge$' .
       - name: Verify browser process teardown and recreation
         if: runner.os == 'Windows'
         run: ./scripts/test-webview-lifecycle.ps1 -Executable ./ssh-agent-totp.exe

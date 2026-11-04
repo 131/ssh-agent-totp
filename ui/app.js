@@ -13,10 +13,13 @@ document.addEventListener('keydown', event => {
   const key = event.key.toLowerCase();
   if (key === 'f5' || (event.ctrlKey && ['r', 'p', 'f', 'g', 'u', 's', '+', '-', '=', '0'].includes(key))) event.preventDefault();
 });
-// Go answers totp_call asynchronously through window.totpDone.
-const pending = new Map(); let sequence = 0;
+// Calls are raw toolkit messages; Go answers asynchronously through window.totpDone.
+// The toolkit injects its invoke function after the page loads: wait for it.
+const pending = new Map(), outbox = []; let sequence = 0;
+const send = message => window._wails?.invoke ? window._wails.invoke(message) : outbox.push(message);
+window.addEventListener('wails:runtime-config-ready', () => { window._wails.invoke('wails:runtime:ready'); outbox.splice(0).forEach(send); });
 window.totpDone = ({id, error, result}) => { const call = pending.get(id); if (!call) return; pending.delete(id); error ? call.reject(new Error(error)) : call.resolve(result); };
-const call = (method, ...args) => new Promise((resolve, reject) => { const id = ++sequence; pending.set(id, {resolve, reject}); window.totp_call(id, method, args); });
+const call = (method, ...args) => new Promise((resolve, reject) => { const id = ++sequence; pending.set(id, {resolve, reject}); send(JSON.stringify({id, method, args})); });
 // Notifications float over the window (top layer, above dialogs) and never move
 // the layout. At most `visible` at once; the rest wait their turn.
 const toasts = {visible: 4, queue: []};
