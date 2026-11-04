@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "version": "v0.3.2",
-  "publishedAt": "2026-11-04T17:54:43Z",
+  "version": "v0.3.3",
+  "publishedAt": "2026-11-04T18:44:23Z",
   "artifacts": [
     {
-      "url": "https://github.com/131/ssh-agent-totp/releases/download/v0.3.2/ssh-agent-totp-windows-amd64.exe",
+      "url": "https://github.com/131/ssh-agent-totp/releases/download/v0.3.3/ssh-agent-totp-windows-amd64.exe",
       "platform": "windows",
       "arch": "amd64",
-      "size": 13473024,
+      "size": 13468928,
       "digestAlgo": "sha512",
-      "digest": "qIYJLkj5FemrrG1BPYG3smko98wEUFNfXD4/VPILm7zfm+djMbbY+EdYEELQK1AsYGr9SHozRjdFjVKCJNcMaQ=="
+      "digest": "6qOMpvDX9F0snhnhta2j4irTGPVDySpA3lBOfaopPFmuN4AwMk+O52y63W1F/ndawBb9U09Ur9Uu7RezP7I7/A=="
     }
   ]
 }
