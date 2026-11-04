@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -19,15 +18,13 @@ import (
 const (
 	DefaultUpstream = "https://github.com/131/ssh-agent-totp"
 	DefaultChannel  = "production"
-	DefaultTTL      = 86400
 )
 
-// Settings is the whole file. It holds preferences and caches, never secrets.
+// Settings is the whole file. It holds preferences, never secrets.
 type Settings struct {
-	Update         Update          `yaml:"update"`
-	Language       string          `yaml:"language"`
-	Tokens         Tokens          `yaml:"tokens"`
-	RemoteChannels *RemoteChannels `yaml:"remote_channels,omitempty"`
+	Update   Update `yaml:"update"`
+	Language string `yaml:"language"`
+	Tokens   Tokens `yaml:"tokens"`
 }
 
 // Update configures auto-update.
@@ -42,21 +39,6 @@ type Update struct {
 type Tokens struct {
 	Path string `yaml:"path,omitempty"`
 	Key  string `yaml:"key"`
-}
-
-// RemoteChannels caches the upstream manifest.json (channel → release tag)
-// for TTL seconds after Fetched.
-type RemoteChannels struct {
-	Upstream string            `yaml:"upstream"`
-	TTL      int               `yaml:"ttl"`
-	Fetched  time.Time         `yaml:"fetched"`
-	List     map[string]string `yaml:"list"`
-}
-
-// Fresh reports whether the cache describes upstream and is still valid.
-func (r *RemoteChannels) Fresh(upstream string, now time.Time) bool {
-	return r != nil && r.Upstream == upstream && len(r.List) > 0 &&
-		now.Before(r.Fetched.Add(time.Duration(r.TTL)*time.Second))
 }
 
 // Defaults are the settings of a missing file.

@@ -1,9 +1,9 @@
 # Settings
 
-Preferences/cache live in `%APPDATA%\ssh-agent-totp\settings.yml`
+Preferences live in `%APPDATA%\ssh-agent-totp\settings.yml`
 (`os.UserConfigDir()`, `~/.config/ssh-agent-totp/settings.yml` elsewhere).
 Missing files/keys use defaults; unreadable files are reported and never
-overwritten. GUI edits and manifest refreshes write the file. It holds no
+overwritten. GUI edits write the file. It holds no
 secrets: [tokens.crypt](TOKENS.md) is beside it; startup state is an OS shortcut.
 
 ## Example
@@ -26,21 +26,12 @@ tokens:
 | `tokens.key` | first agent key | yes | SSH SHA-256 fingerprint; changing it [reseals the store](TOKENS.md#changing-the-key) |
 | `tokens.path` | adjacent `tokens.crypt` | no | Expands `%VARIABLE%`/`$VARIABLE`; default omitted from writes; displayed in settings/status bar |
 | `update.enable` | `true` | yes | `false` disables GitHub requests and hides channel/check controls |
-| `update.channel` | `production` | yes | Manifest key; unknown values fall back to production |
-| `update.upstream` | `https://github.com/131/ssh-agent-totp` | no | GitHub repository supplying manifest/releases; shown in settings |
-| `remote_channels` | absent | no | Managed manifest cache |
+| `update.channel` | `production` | yes | `production` or `beta`, the [manifest](RELEASES.md#channels) followed; unknown values fall back to production |
+| `update.upstream` | `https://github.com/131/ssh-agent-totp` | no | GitHub repository supplying manifests/releases; shown in settings |
 
 The wrench after the logo opens settings: token file, agent key, language,
 startup, channels and version/check controls. Export belongs to the Add dialog,
 not settings; see [Export](TOKENS.md#export).
-
-## Channels
-
-`remote_channels` stores `upstream`, `ttl` (default 86400 seconds), `fetched`
-and manifest `list`. An upstream change invalidates it; *Check for updates*
-ignores its TTL. When GitHub is unreachable, a stale cache from the same
-upstream can be used. Lower TTL to follow releases sooner or remove this
-cache to force refresh.
 
 ## Launch on startup (Windows)
 

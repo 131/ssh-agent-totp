@@ -28,7 +28,7 @@ func TestLanguage(t *testing.T) {
 		t.Fatal(T("tray.quit"))
 	}
 	cause := errors.New("boom")
-	if err := Errorf("err.manifest", cause); !errors.Is(err, cause) || err.Error() != "unreadable manifest.json: boom" {
+	if err := Errorf("err.signer.read", cause); !errors.Is(err, cause) || err.Error() != "unreadable update signer: boom" {
 		t.Fatal(err)
 	}
 }

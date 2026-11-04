@@ -6,7 +6,7 @@ Choose the dull, obvious solution, the one a reader understands at first
 sight and nobody has to explain.
 
 - **One way to do a thing.** One order (alphabetical), one file (sealed
-  whole), one channel list (`manifest.json`). No options for what nobody asked.
+  whole), one manifest per channel (`updates/<channel>.json`). No options for what nobody asked.
 - **Standard formats and tools.** `otpauth://` links, YAML settings, RFC 6238,
   ssh-agent-crypt, ppackage, GoReleaser. The file must stay usable without the
   app: `ssh-agent-crypt -decrypt < tokens.crypt`.

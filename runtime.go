@@ -2,8 +2,8 @@ package main
 
 import (
 	"errors"
+	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 
@@ -82,14 +82,9 @@ func NewRuntime(app *App) *Runtime {
 			session.Reload()
 		}
 	}
-	app.Relaunch = func(path string) error {
-		command := exec.Command(path, updatedFlag)
-		if err := command.Start(); err != nil {
-			return err
-		}
-		command.Process.Release()
-		r.wails.Quit()
-		return nil
+	app.Updater.Wails = r.wails.Updater
+	if err := app.Updater.Init(); err != nil {
+		log.Print(err)
 	}
 	return r
 }

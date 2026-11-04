@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestDefaultsAndPartialFile(t *testing.T) {
@@ -30,16 +29,12 @@ func TestDefaultsAndPartialFile(t *testing.T) {
 
 func TestUpdateWritesYAML(t *testing.T) {
 	store := &Store{Path: filepath.Join(t.TempDir(), "ssh-agent-totp", "settings.yml")}
-	fetched := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
-	_, err := store.Update(func(s *Settings) {
-		s.Update.Channel = "beta"
-		s.RemoteChannels = &RemoteChannels{Upstream: DefaultUpstream, TTL: DefaultTTL, Fetched: fetched, List: map[string]string{"beta": "v0.2.0-beta.1"}}
-	})
+	_, err := store.Update(func(s *Settings) { s.Update.Channel = "beta" })
 	if err != nil {
 		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(store.Path)
-	for _, line := range []string{"enable: true", "upstream: " + DefaultUpstream, "channel: beta", "ttl: 86400", "beta: v0.2.0-beta.1"} {
+	for _, line := range []string{"enable: true", "upstream: " + DefaultUpstream, "channel: beta"} {
 		if !strings.Contains(string(body), line) {
 			t.Fatalf("%q missing from\n%s", line, body)
 		}
@@ -47,12 +42,6 @@ func TestUpdateWritesYAML(t *testing.T) {
 	// The default token file is not written.
 	if strings.Contains(string(body), "path:") {
 		t.Fatalf("default tokens.path written:\n%s", body)
-	}
-	settings, _ := store.Load()
-	if !settings.RemoteChannels.Fresh(DefaultUpstream, fetched.Add(time.Minute)) ||
-		settings.RemoteChannels.Fresh(DefaultUpstream, fetched.Add(25*time.Hour)) ||
-		settings.RemoteChannels.Fresh("https://github.com/me/fork", fetched) {
-		t.Fatal("cache freshness")
 	}
 }
 

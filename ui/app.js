@@ -361,7 +361,7 @@ $('key').addEventListener('change', () => run($('key'), async () => {
 }));
 call('version').then(version => { $('version').textContent = version; $('current-version').textContent = version; }).catch(() => {});
 // Settings dialog (wrench): language, update channel and manual check. The
-// channel list comes from manifest.json; the automatic check stays silent.
+// channels are production and beta; the automatic check stays silent.
 $('settings-button').append(icon('wrench'));
 $('settings-button').addEventListener('click', () => { $('settings').showModal(); loadKeys(); loadStartup(); });
 async function loadStartup() {
@@ -406,11 +406,11 @@ function updates(release) {
 call('update_check').then(updates).catch(() => {}); // silent: errors stay in the panel
 $('check-update').addEventListener('click', () => run($('check-update'), async () => {
   offered = '';
-  const release = await call('update_check', true);
+  const release = await call('update_check');
   updates(release);
   if (release.error) throw new Error(release.error);
   if (release.development && release.latest) notice(t('update.dev.notice', release.latest));
-  else if (release.enabled && !release.available) notice(t('update.uptodate', release.current, release.channel, release.latest || t('update.none')));
+  else if (release.enabled && !release.available) notice(t('update.uptodate', release.current, release.channel));
 }));
 $('open-release').addEventListener('click', () => run($('open-release'), () => call('update_open')));
 $('update-enable').addEventListener('change', () => run($('update-enable'), async () => {
@@ -422,7 +422,7 @@ $('update-enable').addEventListener('change', () => run($('update-enable'), asyn
 $('channel').addEventListener('change', () => run($('channel'), async () => {
   const release = await call('update_channel', $('channel').value);
   updates(release);
-  if (!release.available) notice(t('update.channel.selected', release.channel, release.latest || t('update.none')));
+  if (!release.available) notice(t('update.channel.selected', release.channel));
 }));
 // The language applies at once: Go renders the page again.
 const languageNames = {'fr-fr': 'Français', 'en-us': 'English'};

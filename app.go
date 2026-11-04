@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 
 	sshagentcrypt "github.com/131/ssh-agent-crypt"
 
@@ -23,8 +24,6 @@ type App struct {
 	Agent   func() string
 	Updater *update.Updater
 	Startup *startup.Store
-	// Relaunch starts the updated executable and ends this instance.
-	Relaunch func(path string) error
 	// Reload renders the page again, in the current language.
 	Reload   func()
 	Settings *settings.Store
@@ -41,9 +40,10 @@ func NewApp() *App {
 
 	agent := sshagentcrypt.DefaultAgentAddress
 	return &App{
-		Tokens:   &tokens.Store{Path: store.TokensPath(current), Key: current.Tokens.Key, Crypt: tokens.AgentCrypt(agent)},
-		Agent:    agent,
-		Updater:  update.New(version, store, update.Authenticode),
+		Tokens: &tokens.Store{Path: store.TokensPath(current), Key: current.Tokens.Key, Crypt: tokens.AgentCrypt(agent)},
+		Agent:  agent,
+		Updater: &update.Updater{Raw: "https://raw.githubusercontent.com", Current: version, Settings: store,
+			Executable: os.Executable, Verify: update.Authenticode},
 		Startup:  startup.DefaultStore(),
 		Settings: store,
 	}
@@ -257,13 +257,8 @@ func (a *App) Handle(method string, args []json.RawMessage) (any, error) {
 		return nil, nil
 
 	case "update_check":
-		// update_check(true) is the manual check: manifest.json is fetched again.
 		// A failed check still describes the settings, with its error.
-		check := a.Updater.Check
-		if refresh, _ := arg[bool](args, 0); refresh {
-			check = a.Updater.CheckNow
-		}
-		release, err := check()
+		release, err := a.Updater.Check()
 		if err != nil {
 			release.Error = err.Error()
 		}
@@ -295,16 +290,11 @@ func (a *App) Handle(method string, args []json.RawMessage) (any, error) {
 			return nil, err
 		}
 
-		path, err := a.Updater.Install(tag)
-		if err != nil {
+		if err := a.Updater.Install(tag); err != nil {
 			return nil, err
 		}
 
-		if a.Relaunch == nil {
-			return nil, i18n.Errorf("err.restart")
-		}
-
-		return nil, a.Relaunch(path)
+		return nil, a.Updater.Restart()
 
 	case "update_open":
 		// Development builds cannot update: open the release page of the channel.

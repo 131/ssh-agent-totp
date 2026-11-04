@@ -56,13 +56,13 @@ with code 1 (the lifecycle script reports it as a warning).
 
 | Path | Responsibility |
 | --- | --- |
-| `app.go`, `main.go`, `parent_*.go` | Services/API, bootstrap and post-update wait |
+| `app.go`, `main.go` | Services/API and bootstrap |
 | `runtime.go`, `window_session.go` | Resident ownership and disposable GUI/bridge (Wails) |
 | `ui/` | Embedded HTML, CSS and script, inlined into one page |
 | `internal/{tokens,totp}` | Sealed store, RFC 6238, import/export |
 | `internal/tray` | Tray icon frames and pinned menu |
 | `internal/{clock,clipboard}` | Shared tick and private clipboard |
-| `internal/{update,startup}` | Verified updates and startup shortcut |
+| `internal/{update,startup}` | Wails updater (channels, Authenticode) and startup shortcut |
 | `internal/i18n`, `settings/` | Catalog and preferences |
 | `winres/`, `scripts/` | Resources and Windows integration checks |
 
